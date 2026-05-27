@@ -79,6 +79,8 @@ The skill must classify flaky or failing browser tests into practical categories
 
 The skill must help agents convert selected source-backed test cases into concrete automated tests. It must cover file placement, fixture/data setup, deterministic assertions, command selection, evidence artifacts, and code review checks across existing project runners and browser adapters.
 
+For complete automation landing tasks, the skill must require at least one browser-agent smoke evidence item unless the user explicitly limits scope to API, component, or unit tests. When skipped, the output must state the reason.
+
 ### FR-11: Skill Self-Testing And CI
 
 The project must include automated validation for the skill package, helper scripts, bundled templates, and core output contracts. CI must run without private credentials or paid services.
@@ -188,6 +190,7 @@ evidence:
 - The skill can choose among multiple browser adapter families.
 - The skill can produce both human-readable QA artifacts and automation-ready guidance.
 - The skill can guide implementation of concrete automated tests in existing project stacks.
+- Complete automation landing outputs include browser-agent smoke evidence or an explicit scoped-skip reason.
 - The repository can validate the skill package and helper behavior automatically.
 - The skill can record evidence and known gaps without leaking secrets or sensitive data.
 

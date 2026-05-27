@@ -92,6 +92,7 @@ Use this when the user asked for review, planning, or agent-style output without
 - Files to create or update:
 - Commands:
 - Assertions:
+- Browser-agent smoke evidence:
 - Evidence expected:
 - Cases left manual:
 - Risks:
@@ -105,6 +106,7 @@ Use this when the user asked for review, planning, or agent-style output without
 - Files changed:
 - Runner:
 - Command result:
+- Browser-agent smoke evidence:
 - Failure artifacts:
 - Remaining gaps:
 - Manual/live cases:

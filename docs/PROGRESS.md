@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-27-automation-completeness-hardening.md](tasks/2026-05-27-automation-completeness-hardening.md)
+- Active task: [docs/tasks/2026-05-27-browser-smoke-evidence-default.md](tasks/2026-05-27-browser-smoke-evidence-default.md)
 - Task status: Done
 - Current blocker: None
-- Next step: Re-test `$website-test-automation` on a second real project and review generated test code quality.
+- Next step: Re-test `$website-test-automation` on a second real project and confirm it produces browser-agent smoke evidence or an explicit scoped-skip reason.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -20,7 +20,8 @@
 - 2026-05-27: Hardened `website-test-automation` from the `my-ai-music` agent-style output review and synced the installed copy.
 - 2026-05-27: Published this project to private GitHub repository `leosssvip-dot/AI-test-skill`.
 - 2026-05-27: Added automation implementation guidance, reusable test templates, repository tests, workflow validation, and GitHub Actions CI.
+- 2026-05-27: Added the default browser-agent smoke evidence requirement for complete automation landing tasks.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed repository tests and workflow validation. Source and installed copies passed `quick_validate.py` and `validate-skill.mjs`; `diff -qr` reported no source/install differences. Private GitHub repository `https://github.com/leosssvip-dot/AI-test-skill` remains `PRIVATE`; `main` tracks `origin/main`.
+- `npm run validate` passed repository tests and workflow validation. Source and installed copies passed `quick_validate.py`; installed `validate-skill.mjs` passed; `diff -qr` reported no source/install differences. Private GitHub repository `https://github.com/leosssvip-dot/AI-test-skill` remains `PRIVATE`; `main` tracks `origin/main`.

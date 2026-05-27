@@ -113,6 +113,7 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Forward tests demonstrate PRD/source/plan-driven test case generation.
 - Forward tests demonstrate at least two browser adapter families, one exploratory/browser-agent path and one durable test-runner path.
 - Automation guidance can produce concrete test file skeletons, commands, fixtures, and evidence expectations for common website stacks.
+- Complete automation landing outputs include browser-agent smoke evidence or an explicit scoped-skip reason.
 - Repository validation runs in CI without private credentials or paid services.
 - Documentation clearly separates PRD requirements from roadmap and task records.
 

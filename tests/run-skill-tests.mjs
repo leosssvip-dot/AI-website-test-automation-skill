@@ -62,7 +62,15 @@ test('skill references and templates cover automation implementation', () => {
   for (const rel of requiredFiles) assert.equal(exists(rel), true, `${rel} should exist`);
 
   const implementation = read('website-test-automation/references/automation-implementation.md');
-  for (const phrase of ['file placement', 'fixtures', 'deterministic assertions', 'Runner', 'Code Review Checklist']) {
+  for (const phrase of [
+    'file placement',
+    'fixtures',
+    'deterministic assertions',
+    'browser-agent smoke evidence',
+    'scoped-skip reason',
+    'Runner',
+    'Code Review Checklist',
+  ]) {
     assert.match(implementation, new RegExp(phrase, 'i'));
   }
 
@@ -110,6 +118,7 @@ test('output templates include response-only and implemented automation summarie
   const outputTemplates = read('website-test-automation/references/output-templates.md');
   assert.match(outputTemplates, /Response-Only QA Package/);
   assert.match(outputTemplates, /Implemented Automation Summary/);
+  assert.match(outputTemplates, /Browser-agent smoke evidence/);
   assert.match(outputTemplates, /Mismatches/);
   assert.match(outputTemplates, /Provider\/Live Testing/);
 });

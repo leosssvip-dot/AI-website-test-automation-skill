@@ -107,6 +107,8 @@ for (const phrase of [
   'Automation Implementation',
   'deterministic assertions',
   'Implemented Automation Summary',
+  'browser-agent smoke evidence',
+  'scoped-skip reason',
 ]) {
   const re = new RegExp(phrase, 'i');
   if (!re.test(allText)) errors.push(`Missing core contract phrase: ${phrase}`);
