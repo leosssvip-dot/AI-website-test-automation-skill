@@ -1,0 +1,24 @@
+id: TC-AREA-001
+title: Replace with behavior-focused title
+source:
+  docs: []
+  code: []
+  observed: []
+source_status: documented
+mismatch: ""
+type: e2e
+priority: P1
+risk: replace-with-risk
+persona: replace-with-persona
+preconditions: []
+steps: []
+expected: []
+negative_cases: []
+automation:
+  recommended: false
+  target: manual
+  preferred_tools: []
+evidence:
+  required: []
+assumptions: []
+unknowns: []

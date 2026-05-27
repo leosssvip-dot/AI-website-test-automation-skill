@@ -1,0 +1,4 @@
+interface:
+  display_name: "Website Test Automation"
+  short_description: "Generate and automate website test cases"
+  default_prompt: "Use $website-test-automation to generate product-grounded website test cases and automation guidance."

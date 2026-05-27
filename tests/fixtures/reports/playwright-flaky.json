@@ -1,0 +1,48 @@
+{
+  "suites": [
+    {
+      "title": "projects",
+      "specs": [
+        {
+          "title": "creates a project",
+          "tests": [
+            {
+              "results": [
+                {
+                  "status": "failed",
+                  "error": {
+                    "message": "TimeoutError: locator.click: Timeout 5000ms exceeded"
+                  },
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "path": "test-results/projects-create-retry1/trace.zip"
+                    }
+                  ]
+                },
+                {
+                  "status": "passed"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "disabled user cannot open projects",
+          "tests": [
+            {
+              "results": [
+                {
+                  "status": "failed",
+                  "error": {
+                    "message": "Expected URL /login but received /projects"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
