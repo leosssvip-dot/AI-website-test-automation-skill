@@ -2,17 +2,17 @@
 
 ## Roadmap Status
 
-- Overall status: Planning
-- Current roadmap phase: Implementation planning
-- Current milestone: Implementation plan added
-- Next milestone: Scaffold the `website-test-automation` skill bundle from the implementation plan
+- Overall status: Operational v2 candidate
+- Current roadmap phase: Real-project validation
+- Current milestone: Automation completeness hardening complete
+- Next milestone: Re-test the hardened skill on a second real project
 - Blockers: None
 - Last roadmap review: 2026-05-27
 
 ## Product Requirements Source
 
 - PRD: [docs/PRD.md](PRD.md)
-- Relevant requirements: `FR-1` through `FR-9`, `NFR-1` through `NFR-6`
+- Relevant requirements: `FR-1` through `FR-11`, `NFR-1` through `NFR-6`
 - PRD alignment status: Aligned as of 2026-05-27
 - Known product gaps: None recorded
 - Roadmap impact: Development must keep test case authoring as the core workflow and keep browser automation behind a tool-adapter model.
@@ -97,12 +97,23 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Verify outputs include test cases, coverage matrix, automation selection, and evidence summary.
 - Follow implementation plan Task 10.
 
+### M7: Automation Completeness And CI
+
+- Status: Done
+- Add guidance for converting cases into automated test files.
+- Add reusable templates for Playwright, Cypress, Vitest route/API tests, React Testing Library, and Selenium/WebDriver.
+- Add repository-level automated tests for scripts, references, templates, and contract phrases.
+- Add GitHub Actions validation.
+- Sync and validate the installed skill copy.
+
 ## Project-Level Acceptance Criteria
 
 - The skill package validates structurally with `quick_validate.py`.
 - The local validator checks required references, metadata drift, and core workflow contract.
 - Forward tests demonstrate PRD/source/plan-driven test case generation.
 - Forward tests demonstrate at least two browser adapter families, one exploratory/browser-agent path and one durable test-runner path.
+- Automation guidance can produce concrete test file skeletons, commands, fixtures, and evidence expectations for common website stacks.
+- Repository validation runs in CI without private credentials or paid services.
 - Documentation clearly separates PRD requirements from roadmap and task records.
 
 ## Verification Gates

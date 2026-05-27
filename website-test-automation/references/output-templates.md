@@ -89,9 +89,25 @@ Use this when the user asked for review, planning, or agent-style output without
 - Selected cases:
 - Target runner or browser adapter:
 - Fixtures/data needed:
+- Files to create or update:
 - Commands:
+- Assertions:
 - Evidence expected:
+- Cases left manual:
 - Risks:
+```
+
+## Implemented Automation Summary
+
+```markdown
+## Implemented Automation Summary
+- Cases covered:
+- Files changed:
+- Runner:
+- Command result:
+- Failure artifacts:
+- Remaining gaps:
+- Manual/live cases:
 ```
 
 ## Failure Triage

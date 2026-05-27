@@ -17,9 +17,10 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 4. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
 5. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
 6. Choose an automation target with [automation-selection.md](references/automation-selection.md).
-7. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
-8. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-9. Report with [output-templates.md](references/output-templates.md).
+7. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
+8. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
+9. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
+10. Report with [output-templates.md](references/output-templates.md).
 
 ## Tooling Helpers
 
@@ -27,6 +28,10 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 - `scripts/route-inventory.mjs <repo>` inventories common website routes and handlers.
 - `scripts/summarize-test-report.mjs <report>` summarizes JSON/JUnit-like test reports where possible.
 - `scripts/validate-skill.mjs <skill-path>` checks required files, links, metadata, scripts, and contract drift.
+
+## Automation Templates
+
+Use `assets/automation-templates/` when the user asks to implement tests or wants starter files for a runner. Adapt templates to the target repo instead of copying them blindly.
 
 ## Safety
 

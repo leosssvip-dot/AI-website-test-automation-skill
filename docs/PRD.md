@@ -75,6 +75,14 @@ For paid AI providers, payment processors, credits, subscriptions, external call
 
 The skill must classify flaky or failing browser tests into practical categories such as timing/async, test isolation, environment, infrastructure, data dependency, selector fragility, and product regression.
 
+### FR-10: Automation Implementation Guidance
+
+The skill must help agents convert selected source-backed test cases into concrete automated tests. It must cover file placement, fixture/data setup, deterministic assertions, command selection, evidence artifacts, and code review checks across existing project runners and browser adapters.
+
+### FR-11: Skill Self-Testing And CI
+
+The project must include automated validation for the skill package, helper scripts, bundled templates, and core output contracts. CI must run without private credentials or paid services.
+
 ## Non-Functional Requirements
 
 ### NFR-1: Tool Agnostic
@@ -179,6 +187,8 @@ evidence:
 - The skill can use knowledge graph context without treating graph output as final truth.
 - The skill can choose among multiple browser adapter families.
 - The skill can produce both human-readable QA artifacts and automation-ready guidance.
+- The skill can guide implementation of concrete automated tests in existing project stacks.
+- The repository can validate the skill package and helper behavior automatically.
 - The skill can record evidence and known gaps without leaking secrets or sensitive data.
 
 ## Constraints

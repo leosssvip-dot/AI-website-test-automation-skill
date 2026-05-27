@@ -23,6 +23,7 @@ const requiredRefs = [
   'knowledge-graph-context.md',
   'browser-tool-adapters.md',
   'automation-selection.md',
+  'automation-implementation.md',
   'visual-a11y-performance-security.md',
   'provider-live-testing.md',
   'flake-triage.md',
@@ -39,7 +40,17 @@ const requiredScripts = [
 const exists = (rel) => fs.existsSync(path.join(root, rel));
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
-for (const rel of ['SKILL.md', 'agents/openai.yaml', 'assets/testcase-template.yaml', 'assets/coverage-matrix-template.md']) {
+for (const rel of [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'assets/testcase-template.yaml',
+  'assets/coverage-matrix-template.md',
+  'assets/automation-templates/playwright.spec.ts',
+  'assets/automation-templates/cypress.cy.ts',
+  'assets/automation-templates/vitest-route.test.ts',
+  'assets/automation-templates/testing-library.test.tsx',
+  'assets/automation-templates/selenium.test.js',
+]) {
   if (!exists(rel)) errors.push(`Missing required file: ${rel}`);
 }
 for (const ref of requiredRefs) {
@@ -93,6 +104,9 @@ for (const phrase of [
   'Chrome DevTools MCP',
   'Computer Use',
   'Provider And Paid Live Testing',
+  'Automation Implementation',
+  'deterministic assertions',
+  'Implemented Automation Summary',
 ]) {
   const re = new RegExp(phrase, 'i');
   if (!re.test(allText)) errors.push(`Missing core contract phrase: ${phrase}`);
@@ -105,6 +119,15 @@ if (exists('assets/testcase-template.yaml') && !read('assets/testcase-template.y
 }
 if (exists('assets/coverage-matrix-template.md') && !/Source status/i.test(read('assets/coverage-matrix-template.md'))) {
   errors.push('assets/coverage-matrix-template.md must include Source status.');
+}
+for (const [rel, phrase] of [
+  ['assets/automation-templates/playwright.spec.ts', 'TC-WORKFLOW-001'],
+  ['assets/automation-templates/cypress.cy.ts', 'cy.visit'],
+  ['assets/automation-templates/vitest-route.test.ts', 'describe'],
+  ['assets/automation-templates/testing-library.test.tsx', 'render'],
+  ['assets/automation-templates/selenium.test.js', 'selenium-webdriver'],
+]) {
+  if (exists(rel) && !read(rel).includes(phrase)) errors.push(`${rel} missing expected phrase: ${phrase}`);
 }
 
 for (const script of requiredScripts) {
