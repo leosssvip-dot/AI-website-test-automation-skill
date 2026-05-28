@@ -7,7 +7,7 @@
 ![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
-![license](https://img.shields.io/badge/license-pending-lightgrey)
+![license](https://img.shields.io/badge/license-MIT-green)
 
 Product-grounded QA automation planning and implementation for websites and web apps.
 
@@ -107,4 +107,4 @@ Only test systems you own or are authorized to test. Redact secrets, tokens, coo
 
 ## License
 
-No license has been selected yet. Add a `LICENSE` file before making the repository public.
+MIT. See [LICENSE](LICENSE).

@@ -7,7 +7,7 @@
 ![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
-![license](https://img.shields.io/badge/license-pending-lightgrey)
+![license](https://img.shields.io/badge/license-MIT-green)
 
 面向网站和 Web App 的产品驱动测试用例设计、覆盖分析和自动化落地 Skill。
 
@@ -107,4 +107,4 @@ node website-test-automation/scripts/score-test-readiness.mjs website-test-autom
 
 ## 许可
 
-当前还没有选择开源许可证。正式公开前请先添加 `LICENSE` 文件。
+MIT。详见 [LICENSE](LICENSE)。

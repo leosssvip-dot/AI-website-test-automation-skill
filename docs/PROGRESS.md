@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-28-readme-score-and-agent-install.md](tasks/2026-05-28-readme-score-and-agent-install.md)
+- Active task: [docs/tasks/2026-05-28-add-license.md](tasks/2026-05-28-add-license.md)
 - Task status: Done
 - Current blocker: None
-- Next step: Choose a license and make the repository public when ready.
+- Next step: Make the repository public when ready.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -28,7 +28,8 @@
 - 2026-05-28: Forward-tested `$website-test-automation` on `my-ai-music`; added readiness scorer coverage for task-record-based real-project QA packages and synced the installed skill.
 - 2026-05-28: Renamed the GitHub repository to `leosssvip-dot/AI-website-test-automation-skill` and drafted a bilingual open-source README.
 - 2026-05-28: Split English and Chinese README files, then calibrated public readiness scores and added AI-agent install prompts.
+- 2026-05-28: Added an MIT license for public open-source release preparation.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. README public readiness score is calibrated to `83/100`, English and Chinese README files both include concise AI-agent install prompts plus compatibility notes, and `score-test-readiness.mjs website-test-automation` still returns internal package completeness `overallScore: 100` with `level: 80-90 mature readiness candidate`.
+- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. Root `LICENSE` uses MIT, `package.json` includes `"license": "MIT"`, and English/Chinese README license badges now show MIT.
