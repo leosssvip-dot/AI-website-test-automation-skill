@@ -43,6 +43,10 @@ The skill must treat test case writing as the primary workflow. Generated cases 
 
 The skill must support PRD files, planning docs, task records, source files, routes, API handlers, UI components, schemas, existing tests, reports, screenshots, and browser evidence as inputs.
 
+### FR-3.2: Design Source Compatibility
+
+The skill must support product and design inputs from Figma, Lanhu/蓝湖, MasterGo, MockingBot/摹客, Sketch, Zeplin, Storybook, screenshots, videos, exported specs, prototypes, and design tokens. It must convert design evidence into product models, coverage matrices, test cases, specialized quality checks, and explicit design mismatch notes.
+
 ### FR-3.1: Requirements Source Status
 
 The skill must rank requirement sources and label generated claims or test cases as `documented`, `inferred`, `observed`, or `mismatch`. When sources conflict, the skill must surface the mismatch and required product decision instead of silently choosing an expected result.
@@ -84,6 +88,10 @@ For complete automation landing tasks, the skill must require at least one brows
 ### FR-11: Skill Self-Testing And CI
 
 The project must include automated validation for the skill package, helper scripts, bundled templates, and core output contracts. CI must run without private credentials or paid services.
+
+### FR-12: 80-90 Readiness Scoring
+
+The skill must provide a measurable readiness model for broad completeness claims. The model must score at least eight workstreams: product understanding, source-backed cases, coverage matrix, automation implementation, browser-smoke evidence, CI/flaky reporting, provider/live governance, and specialized quality checks.
 
 ## Non-Functional Requirements
 
@@ -161,6 +169,8 @@ expected:
 negative_cases:
   - Invalid password
   - Disabled account
+data_needs:
+  - Active user account fixture
 automation:
   recommended: true
   target: durable-regression
@@ -181,11 +191,13 @@ evidence:
 - Automation recommendations select the smallest sufficient tool and preserve the existing stack where possible.
 - Paid/provider live-test recommendations include cost caps, representative completion boundaries, callback evidence, and redaction rules.
 - Forward tests show the skill can handle at least one simple site, one authenticated CRUD app, and one failing/flaky browser test suite.
+- Readiness scoring exposes whether the skill or target project is in exploratory, planning, operational, 80-90 readiness, or 90+ proven maturity bands.
 - The skill validates locally before installation or publication.
 
 ## Product-Level Acceptance Criteria
 
 - The skill can generate product-grounded test cases from PRD and source code.
+- The skill can convert common design artifacts and design-system evidence into testable requirements without treating design artifacts as runtime proof.
 - The skill can use knowledge graph context without treating graph output as final truth.
 - The skill can choose among multiple browser adapter families.
 - The skill can produce both human-readable QA artifacts and automation-ready guidance.
@@ -193,6 +205,7 @@ evidence:
 - Complete automation landing outputs include browser-agent smoke evidence or an explicit scoped-skip reason.
 - The repository can validate the skill package and helper behavior automatically.
 - The skill can record evidence and known gaps without leaking secrets or sensitive data.
+- The skill can produce a readiness score and gap list across the major website testing workstreams.
 
 ## Constraints
 

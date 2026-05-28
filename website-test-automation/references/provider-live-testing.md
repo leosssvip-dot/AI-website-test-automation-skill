@@ -38,3 +38,7 @@ Keep manual or gated-live:
 - Real payment processor webhook delivery.
 - End-to-end callback URL validation in a public environment.
 - Generated media quality, model quality, latency variance, and subjective output review.
+
+## Live Plan
+
+Before live execution, fill `assets/checklists/provider-live-test-plan.md`. If any of explicit approval, cost cap, stop condition, test account, or redaction rule is missing, keep the case manual or blocked.

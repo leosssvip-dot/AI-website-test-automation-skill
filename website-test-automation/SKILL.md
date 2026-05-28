@@ -1,6 +1,6 @@
 ---
 name: website-test-automation
-description: Generate, review, and automate website test cases from PRDs, source code, planning docs, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when Codex needs product-grounded QA case design, coverage matrices, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or website regression strategy across Codex browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, or existing project runners.
+description: Generate, review, and automate website test cases from PRDs, source code, planning docs, design artifacts, Figma, Storybook, design tokens, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when Codex needs product-grounded QA case design, coverage matrices, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or website regression strategy across Codex browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, or existing project runners.
 ---
 
 # Website Test Automation
@@ -13,20 +13,23 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 
 1. Discover product and repo context with [workflow.md](references/workflow.md).
 2. Build a product model with [product-understanding.md](references/product-understanding.md).
-3. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
-4. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
-5. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
-6. Choose an automation target with [automation-selection.md](references/automation-selection.md).
-7. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
-8. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
-9. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-10. Report with [output-templates.md](references/output-templates.md).
+3. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
+4. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
+5. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
+6. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
+7. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
+8. Choose an automation target with [automation-selection.md](references/automation-selection.md).
+9. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
+10. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
+11. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
+12. Report with [output-templates.md](references/output-templates.md).
 
 ## Tooling Helpers
 
 - `scripts/detect-web-test-stack.mjs <repo>` detects package manager, frameworks, test tools, scripts, and CI hints.
 - `scripts/route-inventory.mjs <repo>` inventories common website routes and handlers.
 - `scripts/summarize-test-report.mjs <report>` summarizes JSON/JUnit-like test reports where possible.
+- `scripts/score-test-readiness.mjs <repo-or-skill>` scores eight website testing workstreams and returns gaps.
 - `scripts/validate-skill.mjs <skill-path>` checks required files, links, metadata, scripts, and contract drift.
 
 ## Automation Templates

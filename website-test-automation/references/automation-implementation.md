@@ -42,6 +42,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 - `assets/automation-templates/vitest-route.test.ts`: API/route contract tests.
 - `assets/automation-templates/testing-library.test.tsx`: React component tests.
 - `assets/automation-templates/selenium.test.js`: Selenium/WebDriver smoke tests.
+- `assets/automation-templates/webdriverio.e2e.js`: WebdriverIO browser workflow smoke tests.
 
 ## Code Review Checklist
 

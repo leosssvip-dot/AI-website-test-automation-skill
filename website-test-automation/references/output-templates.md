@@ -1,5 +1,14 @@
 # Output Templates
 
+## Contents
+
+- Coverage Summary
+- Readiness Score
+- Response-Only QA Package
+- Automation Handoff
+- Implemented Automation Summary
+- Failure Triage
+
 ## Coverage Summary
 
 ```markdown
@@ -10,6 +19,30 @@
 - Automation candidates:
 - Manual/exploratory checks:
 - Evidence:
+```
+
+## Readiness Score
+
+Use this when the user asks for broad completeness, maturity, 80-90% coverage, or release readiness.
+
+```markdown
+## Readiness Score
+| Workstream | Score | Evidence | Gaps / next action |
+| --- | ---: | --- | --- |
+| Product understanding |  |  |  |
+| Source-backed cases |  |  |  |
+| Coverage matrix |  |  |  |
+| Automation implementation |  |  |  |
+| Browser-smoke evidence |  |  |  |
+| CI/flaky reporting |  |  |  |
+| Provider/live governance |  |  |  |
+| Specialized quality |  |  |  |
+
+- Overall score:
+- Readiness band:
+- Critical blockers:
+- Scoped skips:
+- Verification evidence:
 ```
 
 ## Response-Only QA Package
@@ -35,14 +68,29 @@ Use this when the user asked for review, planning, or agent-style output without
 ```yaml
 - id: TC-AREA-001
   title:
+  source:
+    docs: []
+    code: []
+    observed: []
   source_status: documented
-  source_evidence: []
+  mismatch: ""
+  type:
   priority: P0
   risk:
+  persona:
   preconditions: []
   steps: []
   expected: []
+  negative_cases: []
+  data_needs: []
   automation:
+    recommended:
+    target:
+    preferred_tools: []
+  evidence:
+    required: []
+  assumptions: []
+  unknowns: []
   gap:
 ```
 
@@ -60,7 +108,12 @@ Use this when the user asked for review, planning, or agent-style output without
 - Chrome:
 - Computer Use:
 - Chrome DevTools MCP:
+- Claude Code browser workflows:
+- Playwright MCP/CLI:
 - Playwright runner:
+- Cypress:
+- Selenium:
+- WebdriverIO:
 
 ## Provider/Live Testing
 - Disabled-path coverage:

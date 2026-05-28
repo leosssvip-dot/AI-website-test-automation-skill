@@ -48,3 +48,5 @@ Choose browser tooling by capability, not brand. Playwright is one adapter famil
 Do not choose Playwright by habit. If the repo already covers the behavior with Vitest, Testing Library, Cypress, Selenium, WebdriverIO, or route-handler tests, keep durable regression coverage in that stack and use Codex Browser, Chrome, Computer Use, or Chrome DevTools MCP only for the browser evidence those tools uniquely provide.
 
 Example: for a review-only request on a Next.js app with Vitest route tests and React Testing Library coverage, recommend API/component regression for contracts, Codex Browser for local screenshot and network-negative smoke, Chrome for real authenticated/live profile checks, and Playwright runner only if the user selects cases for durable scripted browser regression.
+
+For complete automation landing, include at least one browser-smoke evidence item or an explicit scoped-skip reason. Use `assets/checklists/browser-smoke-evidence.md` when the evidence has more than one browser observation.

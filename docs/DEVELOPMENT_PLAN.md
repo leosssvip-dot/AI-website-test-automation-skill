@@ -2,9 +2,9 @@
 
 ## Roadmap Status
 
-- Overall status: Operational v2 candidate
+- Overall status: 80-90 mature readiness candidate
 - Current roadmap phase: Real-project validation
-- Current milestone: Automation completeness hardening complete
+- Current milestone: 80-90 testing workflow coverage hardening complete
 - Next milestone: Re-test the hardened skill on a second real project
 - Blockers: None
 - Last roadmap review: 2026-05-27
@@ -12,7 +12,7 @@
 ## Product Requirements Source
 
 - PRD: [docs/PRD.md](PRD.md)
-- Relevant requirements: `FR-1` through `FR-11`, `NFR-1` through `NFR-6`
+- Relevant requirements: `FR-1` through `FR-12`, including `FR-3.2`, `NFR-1` through `NFR-6`
 - PRD alignment status: Aligned as of 2026-05-27
 - Known product gaps: None recorded
 - Roadmap impact: Development must keep test case authoring as the core workflow and keep browser automation behind a tool-adapter model.
@@ -106,6 +106,21 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Add GitHub Actions validation.
 - Sync and validate the installed skill copy.
 
+### M8: 80-90 Readiness Hardening
+
+- Status: Done
+- Add measurable readiness scoring across the main website testing workstreams.
+- Strengthen weak workstreams: flaky/CI, provider/live, visual/accessibility/performance/security, browser-smoke evidence, and automation handoff.
+- Add templates and validation checks so output quality does not depend only on prose guidance.
+- Sync and validate the installed skill copy.
+
+### M9: Design Source And Browser Adapter Hardening
+
+- Status: Done
+- Add design-source adapters for Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, and design tokens.
+- Strengthen product understanding and readiness scoring so design sources contribute to testability.
+- Keep browser adapter guidance explicit for Chrome DevTools MCP, Codex Browser, and Claude Code browser workflows.
+
 ## Project-Level Acceptance Criteria
 
 - The skill package validates structurally with `quick_validate.py`.
@@ -114,6 +129,7 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Forward tests demonstrate at least two browser adapter families, one exploratory/browser-agent path and one durable test-runner path.
 - Automation guidance can produce concrete test file skeletons, commands, fixtures, and evidence expectations for common website stacks.
 - Complete automation landing outputs include browser-agent smoke evidence or an explicit scoped-skip reason.
+- Mature handoffs include a readiness score or explicit gap list across product understanding, test design, coverage, automation, evidence, CI/flaky, provider/live, and specialized quality checks.
 - Repository validation runs in CI without private credentials or paid services.
 - Documentation clearly separates PRD requirements from roadmap and task records.
 
@@ -123,6 +139,7 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Skill scaffold: `quick_validate.py <skill-path>`.
 - Scripts: targeted script smoke tests.
 - Full skill handoff: local validator plus representative forward tests.
+- Maturity hardening: readiness scorer smoke test plus validator contract checks.
 
 ## Documentation Rules
 

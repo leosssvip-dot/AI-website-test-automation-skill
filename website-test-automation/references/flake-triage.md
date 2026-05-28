@@ -18,3 +18,12 @@ Classify before fixing.
 
 Use traces, screenshots, videos, console logs, network logs, and report output before editing tests.
 
+## Triage Flow
+
+1. Reproduce or summarize the failure from reports before editing code.
+2. Classify the likely category and record confidence.
+3. Check whether the failure is a product regression, test bug, data issue, or environment issue.
+4. Fix the narrowest cause and rerun the specific failing case.
+5. Broaden to the containing suite only after the focused case passes.
+
+Use `assets/checklists/flaky-ci-triage.md` for repeatable handoff.

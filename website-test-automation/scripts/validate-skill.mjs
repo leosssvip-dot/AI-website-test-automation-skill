@@ -16,6 +16,8 @@ const root = path.resolve(process.argv[2] || process.cwd());
 const errors = [];
 const requiredRefs = [
   'workflow.md',
+  'readiness-model.md',
+  'design-source-adapters.md',
   'product-understanding.md',
   'test-case-authoring.md',
   'testcase-schema.md',
@@ -34,6 +36,7 @@ const requiredScripts = [
   'detect-web-test-stack.mjs',
   'route-inventory.mjs',
   'summarize-test-report.mjs',
+  'score-test-readiness.mjs',
   'validate-skill.mjs',
 ];
 
@@ -45,11 +48,17 @@ for (const rel of [
   'agents/openai.yaml',
   'assets/testcase-template.yaml',
   'assets/coverage-matrix-template.md',
+  'assets/readiness-score-template.md',
+  'assets/checklists/browser-smoke-evidence.md',
+  'assets/checklists/flaky-ci-triage.md',
+  'assets/checklists/provider-live-test-plan.md',
+  'assets/checklists/specialized-quality-checklist.md',
   'assets/automation-templates/playwright.spec.ts',
   'assets/automation-templates/cypress.cy.ts',
   'assets/automation-templates/vitest-route.test.ts',
   'assets/automation-templates/testing-library.test.tsx',
   'assets/automation-templates/selenium.test.js',
+  'assets/automation-templates/webdriverio.e2e.js',
 ]) {
   if (!exists(rel)) errors.push(`Missing required file: ${rel}`);
 }
@@ -71,12 +80,19 @@ if (exists('SKILL.md')) {
     }
     if (!fm[1].includes('name: website-test-automation')) errors.push('SKILL.md name must be website-test-automation.');
     if (!fm[1].includes('description:')) errors.push('SKILL.md description missing.');
+    const description = fm[1].match(/^description:\s*(.*)$/m)?.[1] || '';
+    for (const phrase of ['design artifacts', 'Figma', 'Storybook', 'design tokens']) {
+      if (!new RegExp(phrase, 'i').test(description)) errors.push(`SKILL.md description missing trigger phrase: ${phrase}`);
+    }
   }
   for (const match of skill.matchAll(/\]\((references\/[^)]+)\)/g)) {
     if (!exists(match[1])) errors.push(`Broken SKILL.md reference link: ${match[1]}`);
   }
   for (const phrase of ['Test cases first', 'Playwright is one adapter family', 'Redact']) {
     if (!skill.includes(phrase)) errors.push(`SKILL.md missing contract phrase: ${phrase}`);
+  }
+  for (const phrase of ['MasterGo', 'MockingBot', 'Sketch', 'Zeplin', 'prototypes']) {
+    if (!new RegExp(phrase, 'i').test(skill)) errors.push(`SKILL.md workflow missing design-source phrase: ${phrase}`);
   }
 }
 
@@ -98,10 +114,14 @@ for (const phrase of [
   'knowledge graph',
   'Redact',
   'Forward-Test',
+  'Readiness Score',
+  '80-90',
   'source_status',
+  'data_needs',
   'mismatch',
   'Codex Browser',
   'Chrome DevTools MCP',
+  'Claude Code browser workflows',
   'Computer Use',
   'Provider And Paid Live Testing',
   'Automation Implementation',
@@ -109,6 +129,13 @@ for (const phrase of [
   'Implemented Automation Summary',
   'browser-agent smoke evidence',
   'scoped-skip reason',
+  'specialized quality',
+  'provider/live',
+  'Figma',
+  'Lanhu',
+  'Storybook',
+  'design tokens',
+  'design mismatch',
 ]) {
   const re = new RegExp(phrase, 'i');
   if (!re.test(allText)) errors.push(`Missing core contract phrase: ${phrase}`);
@@ -116,11 +143,38 @@ for (const phrase of [
 if (/Playwright[^.\n]*(only|sole|center)/i.test(allText) && !/Playwright is one adapter family/i.test(allText)) {
   errors.push('Playwright appears to be positioned as the only path.');
 }
-if (exists('assets/testcase-template.yaml') && !read('assets/testcase-template.yaml').includes('source_status:')) {
-  errors.push('assets/testcase-template.yaml must include source_status.');
+if (exists('assets/testcase-template.yaml')) {
+  const template = read('assets/testcase-template.yaml');
+  if (!template.includes('source_status:')) errors.push('assets/testcase-template.yaml must include source_status.');
+  if (!template.includes('data_needs:')) errors.push('assets/testcase-template.yaml must include data_needs.');
 }
 if (exists('assets/coverage-matrix-template.md') && !/Source status/i.test(read('assets/coverage-matrix-template.md'))) {
   errors.push('assets/coverage-matrix-template.md must include Source status.');
+}
+if (exists('references/output-templates.md') && !read('references/output-templates.md').includes('data_needs:')) {
+  errors.push('references/output-templates.md must include data_needs in test case output.');
+}
+if (exists('references/output-templates.md')) {
+  const outputTemplates = read('references/output-templates.md');
+  for (const phrase of ['Claude Code browser workflows', 'Playwright MCP/CLI', 'Cypress', 'Selenium', 'WebdriverIO']) {
+    if (!new RegExp(phrase, 'i').test(outputTemplates)) errors.push(`references/output-templates.md missing adapter choice: ${phrase}`);
+  }
+}
+if (
+  exists('assets/automation-templates/cypress.cy.ts') &&
+  read('assets/automation-templates/cypress.cy.ts').includes('findByRole') &&
+  !/Testing Library Cypress|@testing-library\/cypress/i.test(read('assets/automation-templates/cypress.cy.ts'))
+) {
+  errors.push('assets/automation-templates/cypress.cy.ts must document Testing Library Cypress setup when using findByRole.');
+}
+if (exists('references/design-source-adapters.md')) {
+  const designAdapters = read('references/design-source-adapters.md');
+  for (const phrase of ['Figma', 'Lanhu', '蓝湖', 'MasterGo', 'MockingBot', '摹客', 'Sketch', 'Zeplin', 'Storybook', 'design tokens', 'screenshots', 'videos', 'design mismatch']) {
+    if (!new RegExp(phrase, 'i').test(designAdapters)) errors.push(`references/design-source-adapters.md missing: ${phrase}`);
+  }
+}
+if (exists('references/product-understanding.md') && !read('references/product-understanding.md').includes('design-source-adapters.md')) {
+  errors.push('references/product-understanding.md must link design-source-adapters.md.');
 }
 for (const [rel, phrase] of [
   ['assets/automation-templates/playwright.spec.ts', 'TC-WORKFLOW-001'],
@@ -128,8 +182,23 @@ for (const [rel, phrase] of [
   ['assets/automation-templates/vitest-route.test.ts', 'describe'],
   ['assets/automation-templates/testing-library.test.tsx', 'render'],
   ['assets/automation-templates/selenium.test.js', 'selenium-webdriver'],
+  ['assets/automation-templates/webdriverio.e2e.js', '@wdio/globals'],
 ]) {
   if (exists(rel) && !read(rel).includes(phrase)) errors.push(`${rel} missing expected phrase: ${phrase}`);
+}
+
+if (exists('scripts/score-test-readiness.mjs')) {
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'score-test-readiness.mjs'), root], { encoding: 'utf8' });
+  if (result.status !== 0) errors.push('scripts/score-test-readiness.mjs failed on skill root.');
+  else {
+    try {
+      const parsed = JSON.parse(result.stdout);
+      if (parsed.dimensionCount !== 8) errors.push('Readiness scorer must report 8 dimensions.');
+      if (parsed.overallScore < 80) errors.push('Readiness scorer must rate the skill package at 80+.');
+    } catch {
+      errors.push('scripts/score-test-readiness.mjs must output JSON.');
+    }
+  }
 }
 
 for (const script of requiredScripts) {

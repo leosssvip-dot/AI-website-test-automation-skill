@@ -34,6 +34,7 @@ const packageManager =
   exists('pnpm-lock.yaml') ? 'pnpm' :
   exists('yarn.lock') ? 'yarn' :
   exists('package-lock.json') ? 'npm' :
+  exists('bun.lock') ? 'bun' :
   exists('bun.lockb') ? 'bun' :
   pkg?.packageManager || 'unknown';
 
@@ -63,6 +64,10 @@ for (const [dep, label] of [
 ]) {
   if (hasDep(dep)) testFrameworks.push(label);
 }
+const hasWdio =
+  ['webdriverio', '@wdio/cli', '@wdio/globals'].some(hasDep) ||
+  ['wdio.conf.ts', 'wdio.conf.js', 'wdio.conf.mjs', 'wdio.conf.cjs'].some(exists);
+if (hasWdio && !testFrameworks.includes('webdriverio')) testFrameworks.push('webdriverio');
 
 const ciFiles = [
   '.github/workflows',
@@ -77,7 +82,7 @@ const browserTools = [];
 if (hasDep('@playwright/test') || exists('playwright.config.ts') || exists('playwright.config.js')) browserTools.push('playwright-runner');
 if (hasDep('cypress') || exists('cypress.config.ts') || exists('cypress.config.js')) browserTools.push('cypress');
 if (hasDep('selenium-webdriver')) browserTools.push('selenium');
-if (hasDep('webdriverio')) browserTools.push('webdriverio');
+if (hasWdio) browserTools.push('webdriverio');
 
 const result = {
   repo: root,

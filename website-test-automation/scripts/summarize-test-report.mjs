@@ -13,7 +13,8 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 const targetArg = process.argv.find((arg, i) => i > 1 && !arg.startsWith('--'));
 const formatFlag = process.argv.find((arg) => arg.startsWith('--format='));
-const format = formatFlag ? formatFlag.split('=')[1] : 'json';
+const formatArgIndex = process.argv.indexOf('--format');
+const format = formatFlag ? formatFlag.split('=')[1] : formatArgIndex !== -1 ? process.argv[formatArgIndex + 1] : 'json';
 
 if (!targetArg) {
   usage();

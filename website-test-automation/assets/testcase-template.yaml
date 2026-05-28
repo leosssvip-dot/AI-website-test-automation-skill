@@ -14,6 +14,7 @@ preconditions: []
 steps: []
 expected: []
 negative_cases: []
+data_needs: []
 automation:
   recommended: false
   target: manual

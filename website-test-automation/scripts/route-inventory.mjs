@@ -35,6 +35,17 @@ const routes = [];
 const add = (kind, route, file, confidence = 'medium') => {
   routes.push({ kind, route, file: path.relative(root, file), confidence });
 };
+const toRoutePath = (raw) => {
+  const route = raw
+    .split('/')
+    .filter((part) => part && !/^\(.*\)$/.test(part))
+    .join('/');
+  return route ? `/${route}` : '/';
+};
+const toApiRoutePath = (raw) => {
+  const nested = toRoutePath(raw || '');
+  return nested === '/' ? '/api' : `/api${nested}`;
+};
 
 for (const file of routeFiles) {
   const rel = path.relative(root, file).replaceAll(path.sep, '/');
@@ -45,16 +56,17 @@ for (const file of routeFiles) {
     add('static-html-route', '/' + raw, file, 'medium');
   }
 
-  if (/^(src\/)?app\/.*\/page\.(tsx?|jsx?)$/.test(rel)) {
-    const raw = rel.replace(/^(src\/)?app\//, '').replace(/\/page\.(tsx?|jsx?)$/, '');
-    add('next-app-route', '/' + raw.replace(/\/?\(.*?\)/g, '').replace(/\/index$/, '').replace(/\/$/, ''), file, 'high');
+  if (/^(src\/)?app\/(?:.*\/)?page\.(tsx?|jsx?)$/.test(rel)) {
+    const raw = rel.replace(/^(src\/)?app\//, '').replace(/\/?page\.(tsx?|jsx?)$/, '');
+    add('next-app-route', toRoutePath(raw), file, 'high');
   }
 
-  if (/^(src\/)?app\/api\/.*\/route\.(tsx?|jsx?)$/.test(rel)) {
-    const raw = rel.replace(/^(src\/)?app\/api\//, '').replace(/\/route\.(tsx?|jsx?)$/, '');
+  const appApiMatch = rel.match(/^(src\/)?app\/api(?:\/(.*))?\/route\.(tsx?|jsx?)$/);
+  if (appApiMatch) {
+    const raw = appApiMatch[2] || '';
     const methods = [...content.matchAll(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]);
     const methodPrefix = methods.length ? methods.join('|') + ' ' : '';
-    add('next-app-api-route', `${methodPrefix}/api/${raw}`, file, 'high');
+    add('next-app-api-route', `${methodPrefix}${toApiRoutePath(raw)}`, file, 'high');
   }
 
   if (/^(src\/)?pages\/.*\.(tsx?|jsx?)$/.test(rel) && !rel.includes('/_app.') && !rel.includes('/_document.')) {

@@ -21,6 +21,7 @@ preconditions: []
 steps: []
 expected: []
 negative_cases: []
+data_needs: []
 automation:
   recommended: true
   target: durable-regression
@@ -47,4 +48,5 @@ unknowns: []
 - Use `observed` when the expected behavior comes from browser/runtime/report evidence.
 - Use `mismatch` when sources disagree; fill `mismatch` with the conflicting evidence and do not recommend durable regression automation until the expected behavior is decided, unless the case explicitly documents current behavior as a temporary characterization test.
 - Avoid cases whose expected result is only "works".
+- Use `data_needs` for required accounts, records, fixtures, mocks, files, provider state, or reset rules.
 - Avoid automation recommendations when data, auth, or environment control is unknown.

@@ -7,10 +7,11 @@ Build a product model before writing substantial test cases.
 Use the strongest available source first:
 
 1. Canonical PRD or requirements docs: `docs/PRD.md`, `docs/product/*`, `docs/requirements*`, or a project-named PRD path.
-2. Product design docs, planning docs, roadmap docs, and task records.
-3. README, architecture docs, domain glossary, and release notes.
-4. Route files, UI components, API handlers, schemas, fixtures, and feature flags.
-5. Existing tests, test reports, issue notes, screenshots, traces, and live browser observations.
+2. Product design sources: Figma, Lanhu/蓝湖, MasterGo, MockingBot/摹客, Sketch, Zeplin, Storybook, screenshots, videos, design specs, prototypes, and design tokens. Use [design-source-adapters.md](design-source-adapters.md).
+3. Product design docs, planning docs, roadmap docs, and task records.
+4. README, architecture docs, domain glossary, and release notes.
+5. Route files, UI components, API handlers, schemas, fixtures, and feature flags.
+6. Existing tests, test reports, issue notes, screenshots, traces, and live browser observations.
 
 When no canonical PRD exists, still build the product model, but mark each claim with a source status:
 
@@ -33,6 +34,7 @@ Capture only what matters for testing:
 - Integrations, third-party services, mocks, and unavailable dependencies.
 - Non-goals and product constraints.
 - Acceptance criteria and known risks.
+- Design states, responsive breakpoints, component variants, visual tokens, and design mismatch risks when design sources exist.
 
 ## Output
 

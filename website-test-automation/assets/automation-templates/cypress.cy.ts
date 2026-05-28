@@ -1,3 +1,5 @@
+// Requires Testing Library Cypress commands, usually via
+// `import '@testing-library/cypress/add-commands';` in the Cypress support file.
 describe('TC-WORKFLOW-001 documented workflow', () => {
   beforeEach(() => {
     cy.visit('/replace-with-route');
