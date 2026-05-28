@@ -34,8 +34,12 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 Or ask an AI agent to install it:
 
 ```text
-Install the Codex skill from https://github.com/leosssvip-dot/AI-website-test-automation-skill into ~/.codex/skills/website-test-automation. Clone the repo, create ~/.codex/skills if needed, copy the website-test-automation/ folder there, then run the skill validator if available. Do not read or expose secrets.
+Install this skill: https://github.com/leosssvip-dot/AI-website-test-automation-skill
 ```
+
+## Agent Compatibility
+
+This is a Codex skill package. Any file-capable coding agent can install it by cloning the repo and copying `website-test-automation/` into the target skills directory. Native skill discovery depends on whether the agent supports Codex-style local skills.
 
 ## Quick Usage
 

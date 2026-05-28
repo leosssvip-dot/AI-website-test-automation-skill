@@ -31,4 +31,4 @@
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. README public readiness score is calibrated to `83/100`, English and Chinese README files both include AI-agent install prompts, and `score-test-readiness.mjs website-test-automation` still returns internal package completeness `overallScore: 100` with `level: 80-90 mature readiness candidate`.
+- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. README public readiness score is calibrated to `83/100`, English and Chinese README files both include concise AI-agent install prompts plus compatibility notes, and `score-test-readiness.mjs website-test-automation` still returns internal package completeness `overallScore: 100` with `level: 80-90 mature readiness candidate`.

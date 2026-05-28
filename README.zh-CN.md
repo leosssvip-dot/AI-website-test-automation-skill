@@ -34,8 +34,12 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 也可以直接交给 AI Agent 安装：
 
 ```text
-请把 https://github.com/leosssvip-dot/AI-website-test-automation-skill 这个 Codex skill 安装到 ~/.codex/skills/website-test-automation。请 clone 仓库，必要时创建 ~/.codex/skills，把 website-test-automation/ 目录复制过去，然后尽量运行验证脚本。不要读取或输出任何 secrets。
+请把这个 skill 安装：https://github.com/leosssvip-dot/AI-website-test-automation-skill
 ```
+
+## Agent 兼容性
+
+这是一个 Codex skill package。能操作文件的 coding agent 基本都可以通过 clone 仓库并复制 `website-test-automation/` 目录来安装；是否能被原生发现和自动触发，取决于该 agent 是否支持 Codex-style local skills。
 
 ## 快速使用
 
