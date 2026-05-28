@@ -5,6 +5,7 @@
 - Coverage Summary
 - Readiness Score
 - Response-Only QA Package
+- Logic Findings Ledger
 - Case Disposition
 - Automation Handoff
 - Implemented Automation Summary
@@ -61,6 +62,10 @@ Use this when the user asked for review, planning, or agent-style output without
 | Area | Conflict | Sources | Decision needed | Temporary test stance |
 | --- | --- | --- | --- | --- |
 
+## Logic Findings Ledger
+| ID | Workflow | Persona | Documented expectation | Observed behavior | Human expectation | Why unreasonable | Severity | Suggested product fix |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
 ## Coverage Matrix
 | Product area | Workflow | Risk | Source evidence | Source status | Test layer | Priority | Automation feasibility | Gap |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -75,6 +80,10 @@ Use this when the user asked for review, planning, or agent-style output without
     observed: []
   source_status: documented
   mismatch: ""
+  human_expectation: ""
+  why_unreasonable: ""
+  logic_risk: false
+  suggested_product_fix: ""
   type:
   priority: P0
   risk:
@@ -106,7 +115,7 @@ Use this when the user asked for review, planning, or agent-style output without
 ## Case Disposition
 | Case ID | Disposition | Layer | Why now / why not now | Next action |
 | --- | --- | --- | --- | --- |
-|  | automate-now / automate-later / browser-smoke / manual/live / exploratory / risk-note/not-in-scope |  |  |  |
+|  | automate-now / automate-later / browser-smoke / manual/live / exploratory / human-logic-risk / risk-note/not-in-scope |  |  |  |
 
 ## Browser Adapter Choice
 - Existing project stack first:

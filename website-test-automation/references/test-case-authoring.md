@@ -17,6 +17,7 @@ Test cases first. Browser automation is an implementation choice after product-g
 - Performance smoke.
 - Security smoke.
 - i18n and localization.
+- Human logic and reasonableness.
 
 ## Quality Rubric
 
@@ -28,6 +29,7 @@ A useful test case must:
 - Have deterministic expected results when possible.
 - Name required data and preconditions.
 - Separate durable automation from manual or exploratory checks.
+- Compare documented expectation, observed behavior, and human expectation for workflows that can be unreasonable even when implemented correctly.
 - Record assumptions and unknowns.
 
 ## Good Example
@@ -41,6 +43,10 @@ source:
   observed: []
 source_status: documented
 mismatch: ""
+human_expectation: "User expects a clear next step after login."
+why_unreasonable: ""
+logic_risk: false
+suggested_product_fix: ""
 type: e2e
 priority: P0
 risk: auth/session
@@ -81,3 +87,7 @@ expected:
 ```
 
 Reject cases like this because they lack source evidence, risk, preconditions, executable steps, and deterministic expectations.
+
+## Human-Logic Cases
+
+Use `logic_risk: true` when the test exists because a flow may be unreasonable for a first-time user, returning user, or mistake-prone user. These cases can become exploratory checks or product-decision blockers; do not turn them into durable regression tests until the intended behavior is accepted.

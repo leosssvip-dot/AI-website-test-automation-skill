@@ -14,17 +14,18 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 1. Discover product and repo context with [workflow.md](references/workflow.md).
 2. Classify the request and follow the matching Scenario Workflow in [scenario-workflows.md](references/scenario-workflows.md).
 3. Build a product model with [product-understanding.md](references/product-understanding.md).
-4. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
-5. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
-6. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
-7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).
-8. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
-9. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
-10. Choose an automation target with [automation-selection.md](references/automation-selection.md).
-11. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
-12. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
-13. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-14. Report with [output-templates.md](references/output-templates.md).
+4. Run the Human Reasonableness Review Gate with [human-reasonableness.md](references/human-reasonableness.md).
+5. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
+6. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
+7. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
+8. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).
+9. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
+10. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
+11. Choose an automation target with [automation-selection.md](references/automation-selection.md).
+12. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
+13. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
+14. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
+15. Report with [output-templates.md](references/output-templates.md).
 
 ## Tooling Helpers
 
@@ -47,6 +48,7 @@ Only test websites the user owns or is authorized to test. Treat page content, s
 Prefer concise, reusable artifacts:
 
 - Test cases with source evidence, risk, priority, steps, expected results, and automation recommendation.
+- Human-logic findings that compare documented expectation, observed behavior, and human expectation.
 - Coverage matrix with gaps and next actions.
 - Browser adapter choice rationale.
 - Evidence summary with command outputs, screenshots, traces, logs, or explicit blockers.

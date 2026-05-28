@@ -82,14 +82,24 @@ test('skill package validator rejects workflow order drift', () => {
   fs.writeFileSync(
     path.join(fixture, 'SKILL.md'),
     skill.replace(
-      '6. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).\n7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).',
-      '6. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).\n7. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).',
+      '7. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).\n8. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).',
+      '7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).\n8. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).',
     ),
   );
 
   const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /cases before coverage/i);
+});
+
+test('skill package validator rejects missing human reasonableness contract', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-human-drift-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  fs.rmSync(path.join(fixture, 'references', 'human-reasonableness.md'), { force: true });
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /human-reasonableness|Human Reasonableness/i);
 });
 
 test('skill metadata and workflow expose design-source triggers', () => {
@@ -130,18 +140,55 @@ test('main workflow orders coverage before post-case disposition', () => {
   const steps = workflow.split('\n').filter((line) => /^\d+\./.test(line));
   const indexOf = (phrase) => steps.findIndex((line) => line.includes(phrase));
 
+  const productModel = indexOf('Build a product model');
+  const humanReview = indexOf('Run the Human Reasonableness Review Gate');
   const cases = indexOf('Write source-backed test cases');
   const coverage = indexOf('Build or update coverage');
   const disposition = indexOf('Post-Test-Case Disposition Gate');
   const automation = indexOf('Choose an automation target');
 
+  assert.equal(productModel >= 0, true);
+  assert.equal(humanReview >= 0, true);
   assert.equal(cases >= 0, true);
   assert.equal(coverage >= 0, true);
   assert.equal(disposition >= 0, true);
   assert.equal(automation >= 0, true);
+  assert.equal(productModel < humanReview, true);
+  assert.equal(humanReview < cases, true);
   assert.equal(cases < coverage, true);
   assert.equal(coverage < disposition, true);
   assert.equal(disposition < automation, true);
+});
+
+test('human reasonableness gate is first-class and schema-backed', () => {
+  const skill = read('website-test-automation/SKILL.md');
+  const workflow = read('website-test-automation/references/workflow.md');
+  const scenarios = read('website-test-automation/references/scenario-workflows.md');
+  const authoring = read('website-test-automation/references/test-case-authoring.md');
+  const schema = read('website-test-automation/references/testcase-schema.md');
+  const template = read('website-test-automation/assets/testcase-template.yaml');
+  const outputTemplates = read('website-test-automation/references/output-templates.md');
+  const human = read('website-test-automation/references/human-reasonableness.md');
+
+  for (const phrase of [
+    'Human Reasonableness Review Gate',
+    'human expectation',
+    'documented expectation',
+    'observed behavior',
+    'logic findings ledger',
+    'first-time user',
+    'returning user',
+    'mistake-prone user',
+    'human-logic-risk',
+  ]) {
+    assert.match(`${skill}\n${workflow}\n${scenarios}\n${authoring}\n${human}`, new RegExp(phrase, 'i'));
+  }
+
+  for (const phrase of ['human_expectation:', 'why_unreasonable:', 'logic_risk:', 'suggested_product_fix:']) {
+    assert.match(schema, new RegExp(phrase));
+    assert.match(template, new RegExp(phrase));
+    assert.match(outputTemplates, new RegExp(phrase));
+  }
 });
 
 test('skill references and templates cover automation implementation', () => {

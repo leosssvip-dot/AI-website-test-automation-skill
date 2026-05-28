@@ -20,6 +20,7 @@ const requiredRefs = [
   'readiness-model.md',
   'design-source-adapters.md',
   'product-understanding.md',
+  'human-reasonableness.md',
   'test-case-authoring.md',
   'testcase-schema.md',
   'coverage-matrix.md',
@@ -98,15 +99,23 @@ if (exists('SKILL.md')) {
   const workflow = skill.split('## Workflow')[1]?.split('## Tooling Helpers')[0] || '';
   const workflowSteps = workflow.split('\n').filter((line) => /^\d+\./.test(line));
   const stepIndex = (phrase) => workflowSteps.findIndex((line) => line.includes(phrase));
+  const productModelStep = stepIndex('Build a product model');
+  const humanStep = stepIndex('Human Reasonableness Review Gate');
   const caseStep = stepIndex('Write source-backed test cases');
   const coverageStep = stepIndex('Build or update coverage');
   const dispositionStep = stepIndex('Post-Test-Case Disposition Gate');
   const automationStep = stepIndex('Choose an automation target');
   if (
-    [caseStep, coverageStep, dispositionStep, automationStep].some((index) => index < 0) ||
-    !(caseStep < coverageStep && coverageStep < dispositionStep && dispositionStep < automationStep)
+    [productModelStep, humanStep, caseStep, coverageStep, dispositionStep, automationStep].some((index) => index < 0) ||
+    !(
+      productModelStep < humanStep &&
+      humanStep < caseStep &&
+      caseStep < coverageStep &&
+      coverageStep < dispositionStep &&
+      dispositionStep < automationStep
+    )
   ) {
-    errors.push('SKILL.md workflow must order cases before coverage, coverage before disposition, and disposition before automation selection.');
+    errors.push('SKILL.md workflow must order product model before Human Reasonableness Review Gate, human review before cases, cases before coverage, coverage before disposition, and disposition before automation selection.');
   }
 }
 
@@ -130,8 +139,14 @@ for (const phrase of [
   'Forward-Test',
   'Readiness Score',
   'Scenario Workflow',
+  'Human Reasonableness Review Gate',
+  'human expectation',
+  'documented expectation',
+  'observed behavior',
+  'logic findings ledger',
   'Post-Test-Case Disposition Gate',
   'case disposition',
+  'human-logic-risk',
   'Response-only review',
   'Automation landing',
   'Browser smoke',
@@ -142,6 +157,10 @@ for (const phrase of [
   'source_status',
   'data_needs',
   'mismatch',
+  'human_expectation',
+  'why_unreasonable',
+  'logic_risk',
+  'suggested_product_fix',
   'Codex Browser',
   'Chrome DevTools MCP',
   'Claude Code browser workflows',
@@ -170,6 +189,9 @@ if (exists('assets/testcase-template.yaml')) {
   const template = read('assets/testcase-template.yaml');
   if (!template.includes('source_status:')) errors.push('assets/testcase-template.yaml must include source_status.');
   if (!template.includes('data_needs:')) errors.push('assets/testcase-template.yaml must include data_needs.');
+  for (const phrase of ['human_expectation:', 'why_unreasonable:', 'logic_risk:', 'suggested_product_fix:']) {
+    if (!template.includes(phrase)) errors.push(`assets/testcase-template.yaml must include ${phrase}`);
+  }
 }
 if (exists('assets/coverage-matrix-template.md') && !/Source status/i.test(read('assets/coverage-matrix-template.md'))) {
   errors.push('assets/coverage-matrix-template.md must include Source status.');
@@ -181,6 +203,9 @@ if (exists('references/output-templates.md')) {
   const outputTemplates = read('references/output-templates.md');
   for (const phrase of ['Claude Code browser workflows', 'Playwright MCP/CLI', 'Cypress', 'Selenium', 'WebdriverIO']) {
     if (!new RegExp(phrase, 'i').test(outputTemplates)) errors.push(`references/output-templates.md missing adapter choice: ${phrase}`);
+  }
+  for (const phrase of ['Logic Findings Ledger', 'human_expectation:', 'why_unreasonable:', 'logic_risk:', 'suggested_product_fix:', 'human-logic-risk']) {
+    if (!new RegExp(phrase, 'i').test(outputTemplates)) errors.push(`references/output-templates.md missing human reasonableness output: ${phrase}`);
   }
 }
 if (

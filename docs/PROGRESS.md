@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-28-review-followup-hardening.md](tasks/2026-05-28-review-followup-hardening.md)
+- Active task: [docs/tasks/2026-05-28-human-reasonableness-gate.md](tasks/2026-05-28-human-reasonableness-gate.md)
 - Task status: Done
 - Current blocker: None
-- Next step: Monitor real-project usage for readiness calibration and route inventory gaps.
+- Next step: Monitor real-project usage for human-logic findings quality and tune the ledger fields if agents over- or under-report product-logic risks.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -34,7 +34,8 @@
 - 2026-05-28: Added standardized scenario workflow constraints and a post-test-case disposition gate to the skill.
 - 2026-05-28: Aligned the main skill workflow order so coverage analysis precedes case disposition, with regression tests and validator coverage.
 - 2026-05-28: Patched review follow-up findings for Pages Router index inventory, readiness score calibration, schema-complete examples, and response-only output scope.
+- 2026-05-28: Added a Human Reasonableness Review Gate so agents compare documented expectation, observed behavior, and human expectation before accepting product logic.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 26 repository tests and workflow validation. `quick_validate.py website-test-automation` returned `Skill is valid!`. Installed skill validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. `git diff --check` passed.
+- `npm run validate` passed 27 repository tests and workflow validation. `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed. Installed skill validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. `quick_validate.py website-test-automation` returned `Skill is valid!`. `git diff --check` passed.

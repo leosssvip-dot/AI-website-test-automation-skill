@@ -6,6 +6,10 @@ source:
   observed: []
 source_status: documented
 mismatch: ""
+human_expectation: ""
+why_unreasonable: ""
+logic_risk: false
+suggested_product_fix: ""
 type: e2e
 priority: P1
 risk: replace-with-risk
