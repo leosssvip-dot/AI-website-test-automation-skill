@@ -5,7 +5,7 @@
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
 ![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
-![readiness](https://img.shields.io/badge/readiness-80--90%20mature%20candidate-0ea5e9)
+![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-pending-lightgrey)
 
@@ -31,6 +31,12 @@ mkdir -p ~/.codex/skills
 rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
 ```
 
+Or ask an AI agent to install it:
+
+```text
+Install the Codex skill from https://github.com/leosssvip-dot/AI-website-test-automation-skill into ~/.codex/skills/website-test-automation. Clone the repo, create ~/.codex/skills if needed, copy the website-test-automation/ folder there, then run the skill validator if available. Do not read or expose secrets.
+```
+
 ## Quick Usage
 
 In Codex, ask for the skill by name:
@@ -49,26 +55,26 @@ Use $website-test-automation to review current website test coverage and recomme
 Use $website-test-automation to triage these failing browser tests and identify flaky causes with evidence.
 ```
 
-## Readiness Score
+## Readiness Assessment
 
-Current self-score for `website-test-automation`:
+Public README score for `website-test-automation`:
 
-| Dimension | Score |
-| --- | ---: |
-| Product understanding | 100 |
-| Source-backed cases | 100 |
-| Coverage matrix | 100 |
-| Automation implementation | 100 |
-| Browser-smoke evidence | 100 |
-| CI/flaky reporting | 100 |
-| Provider/live governance | 100 |
-| Specialized quality | 100 |
+| Dimension | Score | Notes |
+| --- | ---: | --- |
+| Product understanding | 88 | Strong product-model workflow; more public project examples would improve confidence. |
+| Source-backed cases | 90 | Strong schema and evidence rules; broader real-world case samples are still useful. |
+| Coverage matrix | 86 | Clear coverage model; needs more non-Next.js public validation. |
+| Automation implementation | 82 | Templates cover major runners; target-repo adaptation is still required. |
+| Browser-smoke evidence | 78 | Good evidence contract; not a managed browser infrastructure layer. |
+| CI/flaky reporting | 80 | Useful triage model and report summarizer; not a full observability product. |
+| Provider/live governance | 84 | Strong safety gates; real paid/live completion remains manual and explicit. |
+| Specialized quality | 76 | Covers visual, accessibility, performance, and security smoke; not a full specialist platform. |
 
-Overall score: `100`
+Overall calibrated score: `83/100`
 
 Readiness band: `80-90 mature readiness candidate`
 
-The band is intentionally conservative: `90+ proven maturity` should require multiple public real-project case studies, not only a strong self-score.
+The internal helper can score the package itself higher for completeness. This README uses a calibrated public-readiness score to avoid overclaiming before multiple public real-project case studies exist.
 
 ## Helper Scripts
 

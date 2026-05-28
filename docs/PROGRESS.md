@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-28-open-source-readme.md](tasks/2026-05-28-open-source-readme.md)
+- Active task: [docs/tasks/2026-05-28-readme-score-and-agent-install.md](tasks/2026-05-28-readme-score-and-agent-install.md)
 - Task status: Done
 - Current blocker: None
-- Next step: Commit and push the README/repository-name alignment when requested.
+- Next step: Choose a license and make the repository public when ready.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -27,7 +27,8 @@
 - 2026-05-28: Continued skill review; patched design-source trigger metadata, tool-agnostic adapter output templates, WebdriverIO detection, Next.js app API route group inventory, and validator drift checks.
 - 2026-05-28: Forward-tested `$website-test-automation` on `my-ai-music`; added readiness scorer coverage for task-record-based real-project QA packages and synced the installed skill.
 - 2026-05-28: Renamed the GitHub repository to `leosssvip-dot/AI-website-test-automation-skill` and drafted a bilingual open-source README.
+- 2026-05-28: Split English and Chinese README files, then calibrated public readiness scores and added AI-agent install prompts.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. GitHub repository resolves as `leosssvip-dot/AI-website-test-automation-skill`, local `origin` uses the renamed URL, `README.md` is English-only, `README.zh-CN.md` is Chinese-only, both README files include language links and professional badges, and `score-test-readiness.mjs website-test-automation` returned `dimensionCount: 8`, `overallScore: 100`, and `level: 80-90 mature readiness candidate`.
+- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. README public readiness score is calibrated to `83/100`, English and Chinese README files both include AI-agent install prompts, and `score-test-readiness.mjs website-test-automation` still returns internal package completeness `overallScore: 100` with `level: 80-90 mature readiness candidate`.

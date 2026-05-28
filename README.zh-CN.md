@@ -5,7 +5,7 @@
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
 ![tests](https://img.shields.io/badge/tests-21%20passing-brightgreen)
-![readiness](https://img.shields.io/badge/readiness-80--90%20mature%20candidate-0ea5e9)
+![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-pending-lightgrey)
 
@@ -31,6 +31,12 @@ mkdir -p ~/.codex/skills
 rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
 ```
 
+也可以直接交给 AI Agent 安装：
+
+```text
+请把 https://github.com/leosssvip-dot/AI-website-test-automation-skill 这个 Codex skill 安装到 ~/.codex/skills/website-test-automation。请 clone 仓库，必要时创建 ~/.codex/skills，把 website-test-automation/ 目录复制过去，然后尽量运行验证脚本。不要读取或输出任何 secrets。
+```
+
 ## 快速使用
 
 在 Codex 中直接点名这个 skill：
@@ -49,26 +55,26 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 使用 $website-test-automation 分析这些失败的浏览器测试，并基于证据判断 flaky 原因。
 ```
 
-## 成熟度评分
+## 成熟度评估
 
-当前 `website-test-automation` 自评分：
+当前 `website-test-automation` 公开 README 口径评分：
 
-| 维度 | 分数 |
-| --- | ---: |
-| 产品理解 | 100 |
-| 有来源证据的测试用例 | 100 |
-| 覆盖矩阵 | 100 |
-| 自动化实现指导 | 100 |
-| 浏览器 smoke 证据 | 100 |
-| CI / flaky 报告治理 | 100 |
-| Provider / 付费 / Live 测试治理 | 100 |
-| 视觉 / A11y / 性能 / 安全专项 | 100 |
+| 维度 | 分数 | 说明 |
+| --- | ---: | --- |
+| 产品理解 | 88 | 产品模型流程较完整；还需要更多公开项目案例增强可信度。 |
+| 有来源证据的测试用例 | 90 | schema 和证据规则较强；仍需要更多真实项目样例。 |
+| 覆盖矩阵 | 86 | 覆盖模型清晰；还需要更多非 Next.js 项目的公开验证。 |
+| 自动化实现指导 | 82 | 覆盖主流 runner 模板；落地时仍需适配目标项目。 |
+| 浏览器 smoke 证据 | 78 | 证据契约明确；但不是托管式浏览器基础设施。 |
+| CI / flaky 报告治理 | 80 | 有 triage 模型和报告摘要脚本；不是完整可观测性产品。 |
+| Provider / 付费 / Live 测试治理 | 84 | 安全门控较强；真实付费/live completion 仍需显式人工授权。 |
+| 视觉 / A11y / 性能 / 安全专项 | 76 | 覆盖 smoke 层级；不是完整专项测试平台。 |
 
-总分：`100`
+校准总分：`83/100`
 
 成熟度区间：`80-90 mature readiness candidate`
 
-这个区间是刻意保守的：`90+ proven maturity` 应该依赖多个公开真实项目案例，而不只是 skill 自评分。
+内部 helper 对 skill 包完整性可以给出更高分。README 使用更保守的公开成熟度评分，避免在缺少多个公开真实项目案例前过度宣传。
 
 ## 辅助脚本
 
