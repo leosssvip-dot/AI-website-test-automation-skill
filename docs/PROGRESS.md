@@ -30,4 +30,4 @@
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. GitHub repository resolves as `leosssvip-dot/AI-website-test-automation-skill`, local `origin` uses the renamed URL, root `README.md` now has bilingual usage and readiness score details, and `score-test-readiness.mjs website-test-automation` returned `dimensionCount: 8`, `overallScore: 100`, and `level: 80-90 mature readiness candidate`.
+- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. GitHub repository resolves as `leosssvip-dot/AI-website-test-automation-skill`, local `origin` uses the renamed URL, `README.md` is English-only, `README.zh-CN.md` is Chinese-only, both README files include language links and professional badges, and `score-test-readiness.mjs website-test-automation` returned `dimensionCount: 8`, `overallScore: 100`, and `level: 80-90 mature readiness candidate`.
