@@ -52,6 +52,18 @@ mkdir -p ~/.codex/skills
 rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
 ```
 
+## 更新方法
+
+直接交给 AI coding agent：`请更新这个 skill：https://github.com/leosssvip-dot/AI-website-test-automation-skill`
+
+手动更新已 clone 的仓库和 Codex-compatible 本地 skill：
+
+```bash
+cd AI-website-test-automation-skill
+git pull --ff-only
+rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
+```
+
 ## Agent 兼容性
 
 这是一个可迁移的文件型 agent package：`SKILL.md` 定义核心流程，`references/`、`assets/` 和 `scripts/` 提供辅助材料。能读取仓库或文件的 coding agent 都可以直接使用它。是否能原生自动发现，取决于该 agent 是否支持 `SKILL.md` 风格的 skill 包；不支持时，直接让 agent 读取这个仓库或 `website-test-automation/` 目录即可。

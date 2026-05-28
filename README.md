@@ -52,6 +52,18 @@ mkdir -p ~/.codex/skills
 rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
 ```
 
+## Update
+
+Ask an AI coding agent: `Update this skill: https://github.com/leosssvip-dot/AI-website-test-automation-skill`
+
+Manual update for a cloned repo and Codex-compatible local skill install:
+
+```bash
+cd AI-website-test-automation-skill
+git pull --ff-only
+rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
+```
+
 ## Agent Compatibility
 
 This is a portable file-based agent package: `SKILL.md` defines the core workflow, while `references/`, `assets/`, and `scripts/` provide the supporting material. Any coding agent with repository or file access can read and use it directly. Native auto-discovery depends on whether that agent supports `SKILL.md`-style skill packs; otherwise, invoke it by pointing the agent at this repository or the `website-test-automation/` folder.
