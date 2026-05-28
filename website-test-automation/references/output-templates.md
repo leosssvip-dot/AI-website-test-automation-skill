@@ -134,12 +134,18 @@ Use this when the user asked for review, planning, or agent-style output without
 - Existing tests:
 - Tooling detected:
 - Commands run:
+````
 
-## Skill Quality Notes
+## Skill Package Review Notes
+
+Use this only when the user is reviewing or improving this skill package itself, not when applying the skill to a target project.
+
+```markdown
+## Skill Package Review Notes
 - Useful:
 - Vague:
 - Recommended skill improvements:
-````
+```
 
 ## Automation Handoff
 

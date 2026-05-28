@@ -232,8 +232,10 @@ test('readiness scorer rates the skill across major testing workstreams', () => 
   const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', 'website-test-automation']);
   assert.equal(result.dimensionCount, 8);
   assert.equal(result.dimensions.every((dimension) => dimension.score >= 80), true);
-  assert.equal(result.overallScore >= 80, true);
+  assert.equal(result.contractScore >= 80, true);
+  assert.equal(result.overallScore, 89);
   assert.match(result.level, /80-90/);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
   for (const key of [
     'product-understanding',
     'source-backed-cases',
@@ -399,6 +401,22 @@ test('route-inventory handles Next.js app API root routes and route groups', () 
   assert.equal(routes.some((route) => route.includes('(internal)')), false);
 });
 
+test('route-inventory maps Next.js pages index routes to route roots', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-route-inventory-'));
+  fs.mkdirSync(path.join(fixture, 'pages', 'api'), { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'pages', 'index.tsx'), 'export default function Home() { return null; }');
+  fs.writeFileSync(path.join(fixture, 'pages', 'about.tsx'), 'export default function About() { return null; }');
+  fs.writeFileSync(path.join(fixture, 'pages', 'api', 'index.ts'), 'export default function handler() {}');
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const routes = result.routes.map((route) => route.route).sort();
+  assert.equal(routes.includes('/'), true);
+  assert.equal(routes.includes('/about'), true);
+  assert.equal(routes.includes('/api'), true);
+  assert.equal(routes.includes('/index'), false);
+  assert.equal(routes.includes('/api/index'), false);
+});
+
 test('summarize-test-report detects failures, retry signal, and artifacts', () => {
   const result = runJson('node', [
     'website-test-automation/scripts/summarize-test-report.mjs',
@@ -446,10 +464,19 @@ test('output templates keep browser adapter choices tool-agnostic', () => {
 test('response-only test case template matches required schema fields', () => {
   const outputTemplates = read('website-test-automation/references/output-templates.md');
   const schema = read('website-test-automation/references/testcase-schema.md');
-  for (const phrase of ['type:', 'persona:', 'data_needs:', 'negative_cases:', 'evidence:', 'assumptions:', 'unknowns:']) {
+  const authoring = read('website-test-automation/references/test-case-authoring.md');
+  for (const phrase of ['source_status:', 'mismatch:', 'type:', 'persona:', 'data_needs:', 'negative_cases:', 'evidence:', 'assumptions:', 'unknowns:']) {
     assert.match(outputTemplates, new RegExp(phrase));
     assert.match(schema, new RegExp(phrase));
+    assert.match(authoring, new RegExp(phrase));
   }
+});
+
+test('response-only output template stays focused on target-repo QA output', () => {
+  const outputTemplates = read('website-test-automation/references/output-templates.md');
+  const responseOnly = outputTemplates.split('## Response-Only QA Package')[1].split('## Automation Handoff')[0];
+  assert.doesNotMatch(responseOnly, /Skill Quality Notes/i);
+  assert.match(outputTemplates, /Skill Package Review Notes/i);
 });
 
 test('Cypress template is explicit about non-built-in commands', () => {

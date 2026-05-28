@@ -137,12 +137,13 @@ const dimensions = [
   ]),
 ];
 
-const overallScore = Math.round(dimensions.reduce((sum, dimension) => sum + dimension.score, 0) / dimensions.length);
+const contractScore = Math.round(dimensions.reduce((sum, dimension) => sum + dimension.score, 0) / dimensions.length);
 const gaps = dimensions.flatMap((dimension) => dimension.missing.map((missing) => ({
   workstream: dimension.key,
   missing,
 })));
 const hasProvenRealProjectEvidence = hasFile(/(^|\/)(real-project-validation|forward-test-results|case-studies)\//i);
+const overallScore = hasProvenRealProjectEvidence ? contractScore : Math.min(contractScore, 89);
 const level =
   overallScore >= 90 && hasProvenRealProjectEvidence ? '90+ proven maturity candidate' :
   overallScore >= 80 ? '80-90 mature readiness candidate' :
@@ -153,8 +154,15 @@ const level =
 console.log(JSON.stringify({
   target: root,
   dimensionCount: dimensions.length,
+  contractScore,
   overallScore,
   level,
+  evidenceCalibration: {
+    hasProvenRealProjectEvidence,
+    note: hasProvenRealProjectEvidence ?
+      'Overall score reflects contract coverage and bundled real-project evidence.' :
+      'Overall score is capped below 90 until bundled real-project evidence exists; contractScore shows raw package contract coverage.',
+  },
   dimensions,
   gaps,
 }, null, 2));

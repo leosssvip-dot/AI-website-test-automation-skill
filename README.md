@@ -4,7 +4,7 @@
 
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-24%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
@@ -125,7 +125,7 @@ Overall calibrated score: `83/100`
 
 Readiness band: `80-90 mature readiness candidate`
 
-The internal helper can score the package itself higher for completeness. This README uses a calibrated public-readiness score to avoid overclaiming before multiple public real-project case studies exist.
+The internal helper reports raw `contractScore` separately from evidence-calibrated `overallScore`. This README uses a calibrated public-readiness score to avoid overclaiming before multiple public real-project case studies exist.
 
 ## Helper Scripts
 

@@ -38,6 +38,9 @@ title: Valid user logs in and lands on dashboard
 source:
   docs: ["docs/PRD.md#FR-1"]
   code: ["src/app/login/page.tsx", "src/server/auth.ts"]
+  observed: []
+source_status: documented
+mismatch: ""
 type: e2e
 priority: P0
 risk: auth/session
@@ -51,9 +54,20 @@ steps:
 expected:
   - User reaches dashboard
   - Session is established
+negative_cases:
+  - Invalid credentials show a safe error and do not create a session
+data_needs:
+  - Active test user with known credentials
 automation:
   recommended: true
   target: durable-regression
+  preferred_tools: ["existing browser runner"]
+evidence:
+  required:
+    - Login route source
+    - Auth server/session source
+assumptions: []
+unknowns: []
 ```
 
 ## Anti-Example
@@ -67,4 +81,3 @@ expected:
 ```
 
 Reject cases like this because they lack source evidence, risk, preconditions, executable steps, and deterministic expectations.
-

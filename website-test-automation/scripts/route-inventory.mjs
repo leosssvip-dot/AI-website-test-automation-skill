@@ -46,6 +46,7 @@ const toApiRoutePath = (raw) => {
   const nested = toRoutePath(raw || '');
   return nested === '/' ? '/api' : `/api${nested}`;
 };
+const toPagesRoutePath = (raw) => toRoutePath(raw.replace(/(^|\/)index$/, ''));
 
 for (const file of routeFiles) {
   const rel = path.relative(root, file).replaceAll(path.sep, '/');
@@ -70,8 +71,8 @@ for (const file of routeFiles) {
   }
 
   if (/^(src\/)?pages\/.*\.(tsx?|jsx?)$/.test(rel) && !rel.includes('/_app.') && !rel.includes('/_document.')) {
-    const raw = rel.replace(/^(src\/)?pages\//, '').replace(/\.(tsx?|jsx?)$/, '').replace(/\/index$/, '');
-    add(rel.includes('/api/') ? 'next-api-route' : 'next-pages-route', '/' + raw, file, 'high');
+    const raw = rel.replace(/^(src\/)?pages\//, '').replace(/\.(tsx?|jsx?)$/, '');
+    add(rel.includes('/api/') ? 'next-api-route' : 'next-pages-route', toPagesRoutePath(raw), file, 'high');
   }
 
   for (const match of content.matchAll(/\b(?:app|router)\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/g)) {

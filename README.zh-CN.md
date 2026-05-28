@@ -4,7 +4,7 @@
 
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-24%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
@@ -125,7 +125,7 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 
 成熟度区间：`80-90 mature readiness candidate`
 
-内部 helper 对 skill 包完整性可以给出更高分。README 使用更保守的公开成熟度评分，避免在缺少多个公开真实项目案例前过度宣传。
+内部 helper 会分别输出原始 `contractScore` 和按证据校准后的 `overallScore`。README 使用更保守的公开成熟度评分，避免在缺少多个公开真实项目案例前过度宣传。
 
 ## 辅助脚本
 
