@@ -5,6 +5,7 @@
 - Coverage Summary
 - Readiness Score
 - Response-Only QA Package
+- Case Disposition
 - Automation Handoff
 - Implemented Automation Summary
 - Failure Triage
@@ -102,6 +103,11 @@ Use this when the user asked for review, planning, or agent-style output without
 - Exploratory:
 - Not automated yet:
 
+## Case Disposition
+| Case ID | Disposition | Layer | Why now / why not now | Next action |
+| --- | --- | --- | --- | --- |
+|  | automate-now / automate-later / browser-smoke / manual/live / exploratory / risk-note/not-in-scope |  |  |  |
+
 ## Browser Adapter Choice
 - Existing project stack first:
 - Codex Browser:
@@ -140,6 +146,7 @@ Use this when the user asked for review, planning, or agent-style output without
 ```markdown
 ## Automation Handoff
 - Selected cases:
+- Case disposition:
 - Target runner or browser adapter:
 - Fixtures/data needed:
 - Files to create or update:
@@ -156,6 +163,7 @@ Use this when the user asked for review, planning, or agent-style output without
 ```markdown
 ## Implemented Automation Summary
 - Cases covered:
+- Case disposition:
 - Files changed:
 - Runner:
 - Command result:

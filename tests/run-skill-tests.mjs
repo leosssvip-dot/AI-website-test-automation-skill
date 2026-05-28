@@ -86,6 +86,27 @@ test('skill metadata and workflow expose design-source triggers', () => {
   }
 });
 
+test('workflow constraints require post-case disposition and scenario paths', () => {
+  const skill = read('website-test-automation/SKILL.md');
+  assert.match(skill, /scenario-workflows\.md/i);
+
+  const workflow = read('website-test-automation/references/workflow.md');
+  const scenarios = read('website-test-automation/references/scenario-workflows.md');
+  for (const phrase of [
+    'Post-Test-Case Disposition Gate',
+    'case disposition',
+    'Response-only review',
+    'Automation landing',
+    'Browser smoke',
+    'Failure/flaky triage',
+    'Provider/live testing',
+    'Specialized quality',
+    'Readiness audit',
+  ]) {
+    assert.match(`${workflow}\n${scenarios}`, new RegExp(phrase, 'i'));
+  }
+});
+
 test('skill references and templates cover automation implementation', () => {
   const requiredFiles = [
     'website-test-automation/references/automation-implementation.md',

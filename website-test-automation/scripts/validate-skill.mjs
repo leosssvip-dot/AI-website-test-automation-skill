@@ -16,6 +16,7 @@ const root = path.resolve(process.argv[2] || process.cwd());
 const errors = [];
 const requiredRefs = [
   'workflow.md',
+  'scenario-workflows.md',
   'readiness-model.md',
   'design-source-adapters.md',
   'product-understanding.md',
@@ -115,6 +116,15 @@ for (const phrase of [
   'Redact',
   'Forward-Test',
   'Readiness Score',
+  'Scenario Workflow',
+  'Post-Test-Case Disposition Gate',
+  'case disposition',
+  'Response-only review',
+  'Automation landing',
+  'Browser smoke',
+  'Failure/flaky triage',
+  'Provider/live testing',
+  'Specialized quality',
   '80-90',
   'source_status',
   'data_needs',

@@ -7,22 +7,23 @@ description: Generate, review, and automate website test cases from PRDs, source
 
 ## Core Rule
 
-Test cases first. Tool agnostic. Understand the product and code before choosing browser automation. Playwright is one adapter family, not the center of this skill.
+Test cases first. Tool agnostic. Understand the product and code before choosing browser automation. Playwright is one adapter family, not the center of this skill. Test cases are not the finish line: after authoring cases, run the Post-Test-Case Disposition Gate in [scenario-workflows.md](references/scenario-workflows.md).
 
 ## Workflow
 
 1. Discover product and repo context with [workflow.md](references/workflow.md).
-2. Build a product model with [product-understanding.md](references/product-understanding.md).
-3. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
-4. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
-5. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
-6. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
-7. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
-8. Choose an automation target with [automation-selection.md](references/automation-selection.md).
-9. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
-10. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
-11. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-12. Report with [output-templates.md](references/output-templates.md).
+2. Classify the request and follow the matching Scenario Workflow in [scenario-workflows.md](references/scenario-workflows.md).
+3. Build a product model with [product-understanding.md](references/product-understanding.md).
+4. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
+5. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md), then run the Post-Test-Case Disposition Gate.
+6. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
+7. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
+8. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
+9. Choose an automation target with [automation-selection.md](references/automation-selection.md).
+10. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
+11. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
+12. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
+13. Report with [output-templates.md](references/output-templates.md).
 
 ## Tooling Helpers
 
