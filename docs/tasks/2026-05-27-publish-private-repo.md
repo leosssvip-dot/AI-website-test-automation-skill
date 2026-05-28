@@ -30,9 +30,9 @@ Tier 1: repository publishing and documentation state.
 
 ## Verification Result
 
-- Private GitHub repository created: `https://github.com/leosssvip-dot/AI-test-skill`.
+- Private GitHub repository created: `https://github.com/leosssvip-dot/AI-website-test-automation-skill`.
 - Repository visibility confirmed by `gh repo view`: `PRIVATE`.
-- `origin` is configured as `https://github.com/leosssvip-dot/AI-test-skill.git`.
+- `origin` is configured as `https://github.com/leosssvip-dot/AI-website-test-automation-skill.git`.
 - Skill validation before commit passed: `quick_validate.py website-test-automation` returned `Skill is valid!`.
 - Skill package validation before commit passed: `node website-test-automation/scripts/validate-skill.mjs website-test-automation` returned `Skill validation passed.`
 - Initial project commit created: `6e2e1a7` (`Add website test automation skill`).
@@ -41,4 +41,4 @@ Tier 1: repository publishing and documentation state.
 
 ## Final Outcome
 
-Published the project to the private GitHub repository `https://github.com/leosssvip-dot/AI-test-skill` and pushed `main`.
+Published the project to the private GitHub repository `https://github.com/leosssvip-dot/AI-website-test-automation-skill` and pushed `main`.

@@ -197,6 +197,79 @@ test('readiness scorer identifies weak empty targets', () => {
   assert.equal(result.gaps.length > 0, true);
 });
 
+test('readiness scorer recognizes task-record based real-project QA packages', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-real-project-'));
+  fs.mkdirSync(path.join(fixture, 'docs', 'tasks'), { recursive: true });
+  fs.mkdirSync(path.join(fixture, 'tests', 'api'), { recursive: true });
+  fs.mkdirSync(path.join(fixture, 'tests', 'workspace'), { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture, 'AGENTS.md'),
+    [
+      '# Project Agent Rules',
+      'Build from personas, workflows, entities, states, permissions, and route evidence.',
+      'Mobile pages must not horizontally overflow.',
+      'Provider features require live evidence approval, a cost cap, a test account, and a stop condition.',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'docs', 'DEVELOPMENT_PLAN.md'),
+    [
+      '# Development Plan',
+      'The creator loop includes generate, edit, export, and reuse workflows.',
+      'Manual/live provider checks require representative completion, callback or polling evidence, redaction, refund or credit checks, and storage evidence.',
+      'Visual, accessibility, performance, and security smoke checks cover viewport behavior, keyboard focus, role labels, and design mismatch risks.',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'docs', 'tasks', '2026-05-27-website-test-automation-landing.md'),
+    [
+      '# Website Test Automation Landing',
+      '## Product Model Summary',
+      '- documented: source-backed Product Model from roadmap and task records.',
+      '- inferred: API handlers and UI components define current behavior.',
+      '- observed: route inventory and browser screenshots provide runtime evidence.',
+      '## Mismatches',
+      '- source_status mismatch: workspace auth wording conflicts with current source.',
+      '## Coverage Matrix Summary',
+      '| Product area | Workflow | Source status | Layer | Priority | Current coverage and gap |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| auth/session | protected account routes | mismatch | Vitest unit | P0 | current coverage plus next action |',
+      '| provider gates | paid generation disabled path | documented | RTL component | P0 | manual/live checks remain gated |',
+      '## Generated Test Cases',
+      '- id: TC-AUTH-001',
+      '  source_evidence: AGENTS.md, middleware.ts, tests/auth/session.test.ts',
+      '  priority: P0',
+      '  risk: auth/session',
+      '  preconditions: mocked session state',
+      '  expected: protected routes redirect and public workspace remains public',
+      '  negative_cases: unauthenticated access',
+      '  data_needs: mocked user account',
+      '  evidence: command output summary',
+      '  assumptions: current workspace is public by design',
+      '## Automated Tests Landed',
+      '- TC-AUTH-001 mapped to tests/auth/session.test.ts with deterministic assertions and command evidence.',
+      '## Browser Smoke Evidence',
+      '- Browser screenshots captured for desktop and mobile.',
+      '- Console errors: 0.',
+      '- Mobile horizontal overflow: 0.',
+      '- Scoped skip reason: no browser run for docs-only changes.',
+      '## Verification Result',
+      '- Vitest passed 3 files / 14 tests.',
+      '- Failure artifacts expected: test output, screenshots, traces, and logs.',
+    ].join('\n'),
+  );
+  fs.writeFileSync(path.join(fixture, 'tests', 'api', 'tasks-route.test.ts'), 'describe("tasks", () => {});');
+  fs.writeFileSync(path.join(fixture, 'tests', 'api', 'downloads-route.test.ts'), 'describe("downloads", () => {});');
+  fs.writeFileSync(path.join(fixture, 'tests', 'workspace', 'workspace-page.test.tsx'), 'describe("workspace", () => {});');
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  assert.equal(result.overallScore >= 70, true, `expected operational score, got ${result.overallScore}`);
+  assert.equal(result.dimensions.find((dimension) => dimension.key === 'product-understanding')?.score >= 75, true);
+  assert.equal(result.dimensions.find((dimension) => dimension.key === 'source-backed-cases')?.score >= 75, true);
+  assert.equal(result.dimensions.find((dimension) => dimension.key === 'coverage-matrix')?.score >= 75, true);
+  assert.equal(result.dimensions.find((dimension) => dimension.key === 'provider-live-governance')?.score >= 75, true);
+});
+
 test('detect-web-test-stack finds framework, runner, and scripts', () => {
   const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', 'tests/fixtures/auth-crud']);
   assert.equal(result.hasPackageJson, true);

@@ -50,6 +50,21 @@ function hasText(pattern) {
   return pattern.test(allText);
 }
 
+function hasTaskRecordQaPackage() {
+  return hasText(/Product Model Summary/i) &&
+    hasText(/Coverage Matrix Summary/i) &&
+    hasText(/Generated Test Cases/i) &&
+    hasText(/Verification Result/i);
+}
+
+function hasProjectRequirementsSource() {
+  return hasFile(/(^|\/)(PRD|requirements?|product-understanding)\.md$/i) ||
+    hasFile(/(^|\/)AGENTS\.md$/i) ||
+    hasFile(/(^|\/)docs\/DEVELOPMENT_PLAN\.md$/i) ||
+    hasFile(/(^|\/)docs\/plans\/.*(product|roadmap|requirements?|functional|parity|test-plan).*\.md$/i) ||
+    hasTaskRecordQaPackage();
+}
+
 function scoreDimension(key, title, checks) {
   const evidence = [];
   const missing = [];
@@ -73,50 +88,50 @@ function scoreDimension(key, title, checks) {
 
 const dimensions = [
   scoreDimension('product-understanding', 'Product understanding', [
-    { points: 25, label: 'requirements source or product-understanding reference', pass: () => hasFile(/(^|\/)(PRD|requirements?|product-understanding)\.md$/i) },
+    { points: 25, label: 'requirements source or product-understanding reference', pass: () => hasProjectRequirementsSource() },
     { points: 25, label: 'personas/workflows/entities/states/permissions guidance', pass: () => hasText(/personas?.*workflows?|workflows?.*personas?/is) && hasText(/entities|states|permissions/i) },
     { points: 25, label: 'source ranking and mismatch handling', pass: () => hasText(/Requirements Source Ranking|source_status|mismatch/i) },
     { points: 25, label: 'design sources plus assumptions and unknowns are explicit', pass: () => hasText(/Figma|Lanhu|Storybook|design tokens/i) && hasText(/assumptions|unknowns/i) },
   ]),
   scoreDimension('source-backed-cases', 'Source-backed cases', [
-    { points: 25, label: 'test case schema or template', pass: () => hasFile(/testcase-schema\.md$/) || hasFile(/testcase-template\.ya?ml$/) },
-    { points: 25, label: 'source evidence required', pass: () => hasText(/source evidence|source:\s*[\s\S]*docs:/i) },
+    { points: 25, label: 'test case schema or template', pass: () => hasFile(/testcase-schema\.md$/) || hasFile(/testcase-template\.ya?ml$/) || hasTaskRecordQaPackage() || hasText(/Source-Backed Test Cases/i) },
+    { points: 25, label: 'source evidence required', pass: () => hasText(/source evidence|source_evidence|source:\s*[\s\S]*docs:/i) },
     { points: 25, label: 'risk, priority, preconditions, expected results', pass: () => hasText(/priority/i) && hasText(/risk/i) && hasText(/preconditions/i) && hasText(/expected/i) },
     { points: 25, label: 'negative cases, data needs, evidence, assumptions', pass: () => hasText(/negative_cases/i) && hasText(/data_needs/i) && hasText(/evidence/i) && hasText(/assumptions/i) },
   ]),
   scoreDimension('coverage-matrix', 'Coverage matrix', [
     { points: 25, label: 'coverage matrix reference or template', pass: () => hasFile(/coverage-matrix\.(md|ya?ml)$/) || hasText(/Coverage Matrix/i) },
-    { points: 25, label: 'workflow/risk/layer dimensions', pass: () => hasText(/workflow/i) && hasText(/risk/i) && hasText(/test layer/i) },
+    { points: 25, label: 'workflow/risk/layer dimensions', pass: () => hasText(/workflow/i) && hasText(/risk/i) && hasText(/test layer|Layer \| Priority|Layer[\s\S]{0,80}Priority/i) },
     { points: 25, label: 'current coverage and gaps tracked', pass: () => hasText(/Current coverage|gaps?|next action/i) },
     { points: 25, label: 'manual and exploratory coverage visible', pass: () => hasText(/manual/i) && hasText(/exploratory/i) },
   ]),
   scoreDimension('automation-implementation', 'Automation implementation', [
-    { points: 25, label: 'automation implementation guidance', pass: () => hasFile(/automation-implementation\.md$/) || hasText(/Automation Implementation/i) },
+    { points: 25, label: 'automation implementation guidance', pass: () => hasFile(/automation-implementation\.md$/) || hasText(/Automation Implementation|Automated Tests Landed|Automation Handoff/i) },
     { points: 25, label: 'runner templates or existing tests', pass: () => relFiles.filter((file) => /(\.spec\.|\.test\.|\.cy\.|webdriverio|selenium|playwright|vitest|testing-library)/i.test(file)).length >= 3 },
-    { points: 25, label: 'fixtures, commands, deterministic assertions', pass: () => hasText(/fixtures?/i) && hasText(/commands?/i) && hasText(/deterministic assertions/i) },
+    { points: 25, label: 'fixtures, commands, deterministic assertions', pass: () => hasText(/fixtures?|mocked/i) && hasText(/commands?|command evidence|Verification Result/i) && hasText(/deterministic assertions/i) },
     { points: 25, label: 'failure artifacts and review checklist', pass: () => hasText(/failure artifacts/i) && hasText(/Code Review Checklist|review checklist/i) },
   ]),
   scoreDimension('browser-smoke-evidence', 'Browser-smoke evidence', [
-    { points: 25, label: 'browser adapter model', pass: () => hasFile(/browser-tool-adapters\.md$/) || hasText(/Browser Adapter|Codex Browser|Chrome DevTools/i) },
-    { points: 25, label: 'browser-agent smoke evidence required', pass: () => hasText(/browser-agent smoke evidence/i) },
-    { points: 25, label: 'screenshots, console/network, mobile overflow', pass: () => hasText(/screenshots?/i) && hasText(/console\/network|console.*network/is) && hasText(/mobile overflow/i) },
+    { points: 25, label: 'browser adapter model', pass: () => hasFile(/browser-tool-adapters\.md$/) || hasText(/Browser Adapter|Codex Browser|Chrome DevTools|Browser Smoke Evidence/i) },
+    { points: 25, label: 'browser-agent smoke evidence required', pass: () => hasText(/browser-agent smoke evidence|Browser Smoke Evidence/i) },
+    { points: 25, label: 'screenshots, console/network, mobile overflow', pass: () => hasText(/screenshots?/i) && hasText(/console\/network|console.*network|console errors?/is) && hasText(/mobile.*overflow|horizontal overflow/i) },
     { points: 25, label: 'scoped-skip reason', pass: () => hasText(/scoped-skip reason/i) },
   ]),
   scoreDimension('ci-flaky-reporting', 'CI/flaky reporting', [
     { points: 25, label: 'CI reporting guidance', pass: () => hasFile(/ci-reporting\.md$/) || hasText(/CI Reporting/i) },
     { points: 25, label: 'flaky triage taxonomy', pass: () => hasFile(/flake-triage\.md$/) || hasText(/Timing\/async|selector fragility|data dependency/i) },
-    { points: 25, label: 'report summarizer or report parsing', pass: () => hasFile(/summarize-test-report\.mjs$/) || hasText(/test report summary/i) },
+    { points: 25, label: 'report summarizer or report parsing', pass: () => hasFile(/summarize-test-report\.mjs$/) || hasText(/test report summary|Test Files.*Tests|Verification Result/is) },
     { points: 25, label: 'traces, screenshots, videos, retry signals', pass: () => hasText(/traces?/i) && hasText(/screenshots?/i) && hasText(/videos?/i) && hasText(/retry|retried|flaky/i) },
   ]),
   scoreDimension('provider-live-governance', 'Provider/live governance', [
-    { points: 25, label: 'provider/live testing policy', pass: () => hasFile(/provider-live-testing\.md$/) || hasText(/Provider And Paid Live Testing|Provider Live Test Plan/i) },
+    { points: 25, label: 'provider/live testing policy', pass: () => hasFile(/provider-live-testing\.md$/) || hasText(/Provider And Paid Live Testing|Provider Live Test Plan|live evidence approval|manual\/live provider|Provider features require live evidence/i) },
     { points: 25, label: 'cost cap, test account, stop condition', pass: () => hasText(/cost cap/i) && hasText(/test account/i) && hasText(/stop condition/i) },
-    { points: 25, label: 'representative completion and callbacks/polling', pass: () => hasText(/representative completion/i) && hasText(/callback|polling/i) },
+    { points: 25, label: 'representative completion and callbacks/polling', pass: () => hasText(/representative completion|completed representative/i) && hasText(/callback|polling/i) },
     { points: 25, label: 'redaction, refund/credit, storage evidence', pass: () => hasText(/redact|redaction/i) && hasText(/refund|credit/i) && hasText(/storage evidence/i) },
   ]),
   scoreDimension('specialized-quality', 'Specialized quality', [
     { points: 25, label: 'visual/accessibility/performance/security guidance', pass: () => hasFile(/visual-a11y-performance-security\.md$/) || hasText(/Visual.*Accessibility.*Performance.*Security/is) },
-    { points: 25, label: 'visual state and dynamic content rules', pass: () => hasText(/dynamic content|mask/i) && hasText(/viewport/i) },
+    { points: 25, label: 'visual state and dynamic content rules', pass: () => hasText(/dynamic content|mask|visual state|visual.*viewport|viewport behavior/is) && hasText(/viewport/i) },
     { points: 25, label: 'accessibility keyboard/focus/role checks', pass: () => hasText(/keyboard/i) && hasText(/focus/i) && hasText(/role/i) },
     { points: 25, label: 'performance/security smoke plus design mismatch checks', pass: () => hasText(/performance smoke/i) && hasText(/security smoke/i) && hasText(/design mismatch/i) },
   ]),
