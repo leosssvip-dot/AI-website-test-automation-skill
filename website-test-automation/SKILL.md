@@ -15,15 +15,16 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 2. Classify the request and follow the matching Scenario Workflow in [scenario-workflows.md](references/scenario-workflows.md).
 3. Build a product model with [product-understanding.md](references/product-understanding.md).
 4. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
-5. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md), then run the Post-Test-Case Disposition Gate.
+5. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
 6. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
-7. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
-8. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
-9. Choose an automation target with [automation-selection.md](references/automation-selection.md).
-10. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
-11. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
-12. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-13. Report with [output-templates.md](references/output-templates.md).
+7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).
+8. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
+9. Use [knowledge-graph-context.md](references/knowledge-graph-context.md) only when graph analysis adds value.
+10. Choose an automation target with [automation-selection.md](references/automation-selection.md).
+11. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md).
+12. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
+13. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
+14. Report with [output-templates.md](references/output-templates.md).
 
 ## Tooling Helpers
 

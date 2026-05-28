@@ -3,7 +3,7 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-28-scenario-workflow-constraints.md](tasks/2026-05-28-scenario-workflow-constraints.md)
+- Active task: [docs/tasks/2026-05-28-workflow-order-alignment.md](tasks/2026-05-28-workflow-order-alignment.md)
 - Task status: Done
 - Current blocker: None
 - Next step: Monitor real-project usage for gaps in scenario workflow routing.
@@ -32,7 +32,8 @@
 - 2026-05-28: Completed open-source preflight by generalizing agent-facing docs, adding public package/GitHub metadata, adding contribution/security guidance, and upgrading CI off Node 20-era actions.
 - 2026-05-28: Expanded English and Chinese README capability tables and quick usage prompts.
 - 2026-05-28: Added standardized scenario workflow constraints and a post-test-case disposition gate to the skill.
+- 2026-05-28: Aligned the main skill workflow order so coverage analysis precedes case disposition, with regression tests and validator coverage.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 22 repository tests and workflow validation. `quick_validate.py website-test-automation` returned `Skill is valid!`. Installed skill validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. `git diff --check` passed. GitHub repository visibility is `PUBLIC`.
+- `npm run validate` passed 24 repository tests and workflow validation. `quick_validate.py website-test-automation` returned `Skill is valid!`. Installed skill validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. `git diff --check` passed. GitHub repository visibility is `PUBLIC`.

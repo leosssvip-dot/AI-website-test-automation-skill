@@ -75,6 +75,23 @@ test('skill package validator rejects trigger and adapter drift', () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /design artifacts|Claude Code browser workflows/i);
 });
 
+test('skill package validator rejects workflow order drift', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-order-drift-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  const skill = fs.readFileSync(path.join(fixture, 'SKILL.md'), 'utf8');
+  fs.writeFileSync(
+    path.join(fixture, 'SKILL.md'),
+    skill.replace(
+      '6. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).\n7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).',
+      '6. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).\n7. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).',
+    ),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /cases before coverage/i);
+});
+
 test('skill metadata and workflow expose design-source triggers', () => {
   const skill = read('website-test-automation/SKILL.md');
   const description = skill.match(/^---\n[\s\S]*?description:\s*(.+)\n---/)?.[1] || '';
@@ -105,6 +122,26 @@ test('workflow constraints require post-case disposition and scenario paths', ()
   ]) {
     assert.match(`${workflow}\n${scenarios}`, new RegExp(phrase, 'i'));
   }
+});
+
+test('main workflow orders coverage before post-case disposition', () => {
+  const skill = read('website-test-automation/SKILL.md');
+  const workflow = skill.split('## Workflow')[1].split('## Tooling Helpers')[0];
+  const steps = workflow.split('\n').filter((line) => /^\d+\./.test(line));
+  const indexOf = (phrase) => steps.findIndex((line) => line.includes(phrase));
+
+  const cases = indexOf('Write source-backed test cases');
+  const coverage = indexOf('Build or update coverage');
+  const disposition = indexOf('Post-Test-Case Disposition Gate');
+  const automation = indexOf('Choose an automation target');
+
+  assert.equal(cases >= 0, true);
+  assert.equal(coverage >= 0, true);
+  assert.equal(disposition >= 0, true);
+  assert.equal(automation >= 0, true);
+  assert.equal(cases < coverage, true);
+  assert.equal(coverage < disposition, true);
+  assert.equal(disposition < automation, true);
 });
 
 test('skill references and templates cover automation implementation', () => {

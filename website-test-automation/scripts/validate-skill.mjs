@@ -95,6 +95,19 @@ if (exists('SKILL.md')) {
   for (const phrase of ['MasterGo', 'MockingBot', 'Sketch', 'Zeplin', 'prototypes']) {
     if (!new RegExp(phrase, 'i').test(skill)) errors.push(`SKILL.md workflow missing design-source phrase: ${phrase}`);
   }
+  const workflow = skill.split('## Workflow')[1]?.split('## Tooling Helpers')[0] || '';
+  const workflowSteps = workflow.split('\n').filter((line) => /^\d+\./.test(line));
+  const stepIndex = (phrase) => workflowSteps.findIndex((line) => line.includes(phrase));
+  const caseStep = stepIndex('Write source-backed test cases');
+  const coverageStep = stepIndex('Build or update coverage');
+  const dispositionStep = stepIndex('Post-Test-Case Disposition Gate');
+  const automationStep = stepIndex('Choose an automation target');
+  if (
+    [caseStep, coverageStep, dispositionStep, automationStep].some((index) => index < 0) ||
+    !(caseStep < coverageStep && coverageStep < dispositionStep && dispositionStep < automationStep)
+  ) {
+    errors.push('SKILL.md workflow must order cases before coverage, coverage before disposition, and disposition before automation selection.');
+  }
 }
 
 if (exists('agents/openai.yaml')) {
