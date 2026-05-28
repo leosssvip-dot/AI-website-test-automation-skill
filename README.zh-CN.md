@@ -15,12 +15,18 @@
 
 ## 能做什么
 
-- 从 PRD、计划文档、源码、路由、API、已有测试、报告、截图和设计材料建立产品模型。
-- 生成有来源证据的测试用例，包含风险、优先级、证据、前置条件、步骤、期望结果和自动化目标。
-- 生成覆盖矩阵，并保留 documented、inferred、observed、mismatch 等证据状态。
-- 选择合适的自动化分层：API、组件、浏览器 smoke、稳定 E2E、视觉、可访问性、性能 smoke、安全 smoke、manual/live 或 exploratory。
-- 尽量基于目标项目已有测试栈落地自动化测试。
-- 规划浏览器证据、CI/flaky 分析和 provider/live 测试门控。
+| 能力 | Agent 可以产出什么 |
+| --- | --- |
+| 产品和仓库理解 | 基于 PRD、计划文档、源码、路由、API、已有测试、报告、截图、Storybook、Figma、design tokens 和设计材料建立产品模型。 |
+| 有来源证据的测试用例 | 生成 P0/P1/P2 用例，包含来源证据、风险、优先级、前置条件、步骤、期望结果、数据需求、负向用例、假设和未知项。 |
+| 覆盖分析 | 按 workflow、risk、source status、automation layer、当前覆盖、缺口和下一步生成覆盖矩阵。 |
+| 自动化策略 | 推荐 API、组件、浏览器 smoke、稳定 E2E、视觉、可访问性、性能 smoke、安全 smoke、manual/live 或 exploratory 覆盖方式。 |
+| 测试落地 | 尽量使用目标项目已有 runner 落地测试：Playwright、Cypress、Selenium、WebdriverIO、Vitest、Testing Library、route tests 或项目自定义脚本。 |
+| 浏览器证据 | 通过 browser-agent 做 smoke 检查，输出截图、console/network 发现、viewport 覆盖、移动端溢出检查和 scoped skip reason。 |
+| CI 和 flaky 分析 | 汇总失败、retry 信号和 artifact，判断 flaky 原因，并给出稳定化动作。 |
+| Provider/live 治理 | 为付费 provider 和 live integration 设计安全测试计划，包含 cost cap、test account、stop condition、代表性完成证据、callback/polling、存储证据和脱敏规则。 |
+| 专项质量检查 | 提供视觉、可访问性、性能、安全 smoke 和 design mismatch 检查清单。 |
+| 成熟度评分 | 输出八个维度的成熟度评分、明确缺口和下一批推荐测试。 |
 
 ## 快速安装
 
@@ -58,14 +64,34 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 使用 website-test-automation skill package 检查这个项目，生成有来源证据的覆盖矩阵和 P0/P1 测试用例，选择自动化分层，并落地最高价值的测试和验证证据。
 ```
 
-更简洁的提示词：
+常用提示词：
 
 ```text
 使用 website-test-automation skill package 检查当前网站测试覆盖，找出缺口，并推荐下一批要自动化的测试。
 ```
 
 ```text
+使用 website-test-automation skill package 基于 PRD、路由、API、UI 代码、已有测试和设计材料生成有来源证据的 P0/P1/P2 测试用例。返回覆盖矩阵，并标出假设和 mismatch。
+```
+
+```text
+使用 website-test-automation skill package 在这个项目已有测试 runner 中落地最优先的测试。保持 diff 聚焦，并报告命令、结果和证据。
+```
+
+```text
+使用 website-test-automation skill package 对主要用户流程做一次浏览器 smoke。记录截图、console/network 发现、响应式 viewport 结果，以及任何 scoped skip。
+```
+
+```text
 使用 website-test-automation skill package 分析这些失败的浏览器测试，并基于证据判断 flaky 原因。
+```
+
+```text
+使用 website-test-automation skill package 规划安全的 provider/live 测试，包含 cost cap、test account、stop condition、代表性完成证据和脱敏规则。
+```
+
+```text
+使用 website-test-automation skill package 为最高风险页面补充视觉、可访问性、性能 smoke 和安全 smoke 检查。
 ```
 
 ## 成熟度评估

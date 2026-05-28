@@ -15,12 +15,18 @@ Repository: `leosssvip-dot/AI-website-test-automation-skill`
 
 ## What It Does
 
-- Builds a Product Model from PRDs, planning docs, source code, routes, APIs, existing tests, reports, screenshots, and design artifacts.
-- Generates source-backed test cases with risk, priority, evidence, preconditions, steps, expected results, and automation targets.
-- Builds coverage matrices that preserve documented, inferred, observed, and mismatch evidence.
-- Chooses the right automation layer: API, component, browser smoke, durable E2E, visual, accessibility, performance smoke, security smoke, manual/live, or exploratory.
-- Implements selected tests using the target repo's existing runner whenever possible.
-- Plans browser-agent evidence, CI/flaky triage, and provider/live testing gates.
+| Capability | What the agent can produce |
+| --- | --- |
+| Product and repo understanding | Product model from PRDs, plans, source code, routes, APIs, existing tests, reports, screenshots, Storybook, Figma, design tokens, and other design artifacts. |
+| Source-backed test cases | P0/P1/P2 cases with source evidence, risk, priority, preconditions, steps, expected results, data needs, negative cases, assumptions, and unknowns. |
+| Coverage analysis | Coverage matrix by workflow, risk, source status, automation layer, current coverage, gaps, and next action. |
+| Automation strategy | Recommendation for API, component, browser smoke, durable E2E, visual, accessibility, performance smoke, security smoke, manual/live, or exploratory coverage. |
+| Test implementation | Targeted automated tests using the repo's existing runner when possible: Playwright, Cypress, Selenium, WebdriverIO, Vitest, Testing Library, route tests, or project-specific scripts. |
+| Browser evidence | Browser-agent smoke checks with screenshots, console/network notes, viewport coverage, mobile overflow checks, and scoped skip reasons. |
+| CI and flaky triage | Failure summaries, retry signals, artifact review, flaky cause hypotheses, and concrete stabilization actions. |
+| Provider/live governance | Safe plans for paid providers and live integrations with cost caps, test accounts, stop conditions, representative completion, callbacks/polling, storage evidence, and redaction. |
+| Specialized quality checks | Visual, accessibility, performance, security-smoke, and design-mismatch checklists. |
+| Readiness scoring | Eight-dimension maturity score plus explicit gaps and recommended next tests. |
 
 ## Quick Install
 
@@ -58,14 +64,34 @@ Ask your coding agent to use this package:
 Use the website-test-automation skill package to inspect this repo, build a source-backed coverage matrix, generate P0/P1 test cases, choose automation layers, and implement the highest-value tests with evidence.
 ```
 
-Shorter prompts:
+Common prompts:
 
 ```text
 Use the website-test-automation skill package to review current website test coverage and recommend the next automated tests.
 ```
 
 ```text
+Use the website-test-automation skill package to generate source-backed P0/P1/P2 test cases from the PRD, routes, APIs, UI code, existing tests, and design artifacts. Return a coverage matrix and identify assumptions or mismatches.
+```
+
+```text
+Use the website-test-automation skill package to implement the top recommended tests in this repo's existing test runner. Keep the diff scoped and report commands, results, and evidence.
+```
+
+```text
+Use the website-test-automation skill package to run a browser smoke pass for the main user workflows. Capture screenshots, console/network findings, responsive viewport notes, and any scoped skips.
+```
+
+```text
 Use the website-test-automation skill package to triage these failing browser tests and identify flaky causes with evidence.
+```
+
+```text
+Use the website-test-automation skill package to plan safe provider/live testing with cost caps, test accounts, stop conditions, representative completion evidence, and redaction rules.
+```
+
+```text
+Use the website-test-automation skill package to add visual, accessibility, performance-smoke, and security-smoke checks for the highest-risk pages.
 ```
 
 ## Readiness Assessment
