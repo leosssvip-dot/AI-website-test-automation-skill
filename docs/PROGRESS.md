@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-05-28-add-license.md](tasks/2026-05-28-add-license.md)
+- Active task: [docs/tasks/2026-05-28-open-source-preflight.md](tasks/2026-05-28-open-source-preflight.md)
 - Task status: Done
 - Current blocker: None
-- Next step: Make the repository public when ready.
+- Next step: Make the GitHub repository public when ready.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -29,7 +29,8 @@
 - 2026-05-28: Renamed the GitHub repository to `leosssvip-dot/AI-website-test-automation-skill` and drafted a bilingual open-source README.
 - 2026-05-28: Split English and Chinese README files, then calibrated public readiness scores and added AI-agent install prompts.
 - 2026-05-28: Added an MIT license for public open-source release preparation.
+- 2026-05-28: Completed open-source preflight by generalizing agent-facing docs, adding public package/GitHub metadata, adding contribution/security guidance, and upgrading CI off Node 20-era actions.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. Root `LICENSE` uses MIT, `package.json` includes `"license": "MIT"`, and English/Chinese README license badges now show MIT.
+- `npm run validate` passed 21 repository tests and workflow validation. `git diff --check` passed. `quick_validate.py website-test-automation` returned `Skill is valid!`. Installed copy validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. GitHub repository description is set and visibility remains `PRIVATE`. CI workflow now uses `actions/checkout@v6`, `actions/setup-node@v6`, and Node 24. Internal readiness score remains `overallScore: 100`, `level: 80-90 mature readiness candidate`.

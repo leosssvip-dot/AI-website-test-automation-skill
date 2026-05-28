@@ -9,7 +9,7 @@
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-Product-grounded QA automation planning and implementation for websites and web apps.
+Agent-ready QA automation planning and implementation for websites and web apps.
 
 Repository: `leosssvip-dot/AI-website-test-automation-skill`
 
@@ -24,39 +24,48 @@ Repository: `leosssvip-dot/AI-website-test-automation-skill`
 
 ## Quick Install
 
-```bash
-git clone https://github.com/leosssvip-dot/AI-website-test-automation-skill.git
-cd AI-website-test-automation-skill
-mkdir -p ~/.codex/skills
-rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
-```
-
-Or ask an AI agent to install it:
+Ask an AI coding agent to install it:
 
 ```text
 Install this skill: https://github.com/leosssvip-dot/AI-website-test-automation-skill
 ```
 
+Manual clone:
+
+```bash
+git clone https://github.com/leosssvip-dot/AI-website-test-automation-skill.git
+cd AI-website-test-automation-skill
+```
+
+For agents that read files directly, point the agent at `website-test-automation/SKILL.md`.
+
+For agents that support `SKILL.md`-style local skill discovery, copy the bundle into that agent's skill directory. Example for Codex-compatible local skills:
+
+```bash
+mkdir -p ~/.codex/skills
+rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
+```
+
 ## Agent Compatibility
 
-This is a Codex skill package. Any file-capable coding agent can install it by cloning the repo and copying `website-test-automation/` into the target skills directory. Native skill discovery depends on whether the agent supports Codex-style local skills.
+This is a portable file-based agent package: `SKILL.md` defines the core workflow, while `references/`, `assets/`, and `scripts/` provide the supporting material. Any coding agent with repository or file access can read and use it directly. Native auto-discovery depends on whether that agent supports `SKILL.md`-style skill packs; otherwise, invoke it by pointing the agent at this repository or the `website-test-automation/` folder.
 
 ## Quick Usage
 
-In Codex, ask for the skill by name:
+Ask your coding agent to use this package:
 
 ```text
-Use $website-test-automation to inspect this repo, build a source-backed coverage matrix, generate P0/P1 test cases, choose automation layers, and implement the highest-value tests with evidence.
+Use the website-test-automation skill package to inspect this repo, build a source-backed coverage matrix, generate P0/P1 test cases, choose automation layers, and implement the highest-value tests with evidence.
 ```
 
 Shorter prompts:
 
 ```text
-Use $website-test-automation to review current website test coverage and recommend the next automated tests.
+Use the website-test-automation skill package to review current website test coverage and recommend the next automated tests.
 ```
 
 ```text
-Use $website-test-automation to triage these failing browser tests and identify flaky causes with evidence.
+Use the website-test-automation skill package to triage these failing browser tests and identify flaky causes with evidence.
 ```
 
 ## Readiness Assessment
@@ -104,6 +113,10 @@ This skill focuses on website and web app QA automation. It is not a complete pl
 ## Safety
 
 Only test systems you own or are authorized to test. Redact secrets, tokens, cookies, PII, customer data, one-time IDs, raw provider payloads, and sensitive network responses from prompts, reports, logs, screenshots, and PRs.
+
+## Contributing And Security
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution scope and [SECURITY.md](SECURITY.md) for responsible disclosure and testing boundaries.
 
 ## License
 

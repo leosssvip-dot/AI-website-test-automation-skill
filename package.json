@@ -1,9 +1,27 @@
 {
   "name": "ai-website-test-automation-skill",
   "version": "0.1.0",
+  "description": "Agent-ready website QA automation skill for source-backed test planning, coverage analysis, and automated test implementation.",
   "license": "MIT",
-  "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leosssvip-dot/AI-website-test-automation-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leosssvip-dot/AI-website-test-automation-skill/issues"
+  },
+  "homepage": "https://github.com/leosssvip-dot/AI-website-test-automation-skill#readme",
+  "keywords": [
+    "ai-agent",
+    "testing",
+    "qa",
+    "website",
+    "automation",
+    "playwright",
+    "cypress",
+    "skill"
+  ],
   "scripts": {
     "test": "node tests/run-skill-tests.mjs",
     "validate": "npm run test && node scripts/validate-agent-workflow.mjs"

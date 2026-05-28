@@ -9,7 +9,7 @@
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-面向网站和 Web App 的产品驱动测试用例设计、覆盖分析和自动化落地 Skill。
+面向网站和 Web App 的通用 AI Agent 测试用例设计、覆盖分析和自动化落地 Skill。
 
 仓库：`leosssvip-dot/AI-website-test-automation-skill`
 
@@ -24,39 +24,48 @@
 
 ## 快速安装
 
-```bash
-git clone https://github.com/leosssvip-dot/AI-website-test-automation-skill.git
-cd AI-website-test-automation-skill
-mkdir -p ~/.codex/skills
-rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
-```
-
-也可以直接交给 AI Agent 安装：
+直接交给 AI coding agent 安装：
 
 ```text
 请把这个 skill 安装：https://github.com/leosssvip-dot/AI-website-test-automation-skill
 ```
 
+手动 clone：
+
+```bash
+git clone https://github.com/leosssvip-dot/AI-website-test-automation-skill.git
+cd AI-website-test-automation-skill
+```
+
+如果你的 agent 能直接读取文件，把它指向 `website-test-automation/SKILL.md` 即可。
+
+如果你的 agent 支持 `SKILL.md` 风格的本地 skill 自动发现，把这个目录复制到对应的 skill 目录。Codex-compatible 本地 skill 示例：
+
+```bash
+mkdir -p ~/.codex/skills
+rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
+```
+
 ## Agent 兼容性
 
-这是一个 Codex skill package。能操作文件的 coding agent 基本都可以通过 clone 仓库并复制 `website-test-automation/` 目录来安装；是否能被原生发现和自动触发，取决于该 agent 是否支持 Codex-style local skills。
+这是一个可迁移的文件型 agent package：`SKILL.md` 定义核心流程，`references/`、`assets/` 和 `scripts/` 提供辅助材料。能读取仓库或文件的 coding agent 都可以直接使用它。是否能原生自动发现，取决于该 agent 是否支持 `SKILL.md` 风格的 skill 包；不支持时，直接让 agent 读取这个仓库或 `website-test-automation/` 目录即可。
 
 ## 快速使用
 
-在 Codex 中直接点名这个 skill：
+让你的 coding agent 使用这个能力包：
 
 ```text
-使用 $website-test-automation 检查这个项目，生成有来源证据的覆盖矩阵和 P0/P1 测试用例，选择自动化分层，并落地最高价值的测试和验证证据。
+使用 website-test-automation skill package 检查这个项目，生成有来源证据的覆盖矩阵和 P0/P1 测试用例，选择自动化分层，并落地最高价值的测试和验证证据。
 ```
 
 更简洁的提示词：
 
 ```text
-使用 $website-test-automation 检查当前网站测试覆盖，找出缺口，并推荐下一批要自动化的测试。
+使用 website-test-automation skill package 检查当前网站测试覆盖，找出缺口，并推荐下一批要自动化的测试。
 ```
 
 ```text
-使用 $website-test-automation 分析这些失败的浏览器测试，并基于证据判断 flaky 原因。
+使用 website-test-automation skill package 分析这些失败的浏览器测试，并基于证据判断 flaky 原因。
 ```
 
 ## 成熟度评估
@@ -104,6 +113,10 @@ node website-test-automation/scripts/score-test-readiness.mjs website-test-autom
 ## 安全边界
 
 只测试你拥有或被授权测试的系统。提示词、报告、日志、截图和 PR 中必须隐藏 secrets、tokens、cookies、PII、客户数据、一次性 ID、原始 provider payload 和敏感网络响应。
+
+## 贡献与安全
+
+欢迎提交 issue 和 pull request。贡献范围见 [CONTRIBUTING.md](CONTRIBUTING.md)，负责任披露和测试边界见 [SECURITY.md](SECURITY.md)。
 
 ## 许可
 

@@ -1,6 +1,6 @@
 ---
 name: website-test-automation
-description: Generate, review, and automate website test cases from PRDs, source code, planning docs, design artifacts, Figma, Storybook, design tokens, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when Codex needs product-grounded QA case design, coverage matrices, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or website regression strategy across Codex browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, or existing project runners.
+description: Generate, review, and automate website test cases from PRDs, source code, planning docs, design artifacts, Figma, Storybook, design tokens, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when an AI coding agent needs product-grounded QA case design, coverage matrices, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or website regression strategy across browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, or existing project runners.
 ---
 
 # Website Test Automation
