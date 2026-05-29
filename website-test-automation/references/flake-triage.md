@@ -26,4 +26,6 @@ Use traces, screenshots, videos, console logs, network logs, and report output b
 4. Fix the narrowest cause and rerun the specific failing case.
 5. Broaden to the containing suite only after the focused case passes.
 
+For agent-driven classification of traces, console, and network evidence, see [ai-native-testing.md](ai-native-testing.md). Treat each classification as a hypothesis with confidence and confirm it before editing.
+
 Use `assets/checklists/flaky-ci-triage.md` for repeatable handoff.

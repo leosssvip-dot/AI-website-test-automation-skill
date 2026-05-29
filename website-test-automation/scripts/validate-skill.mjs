@@ -28,6 +28,8 @@ const requiredRefs = [
   'browser-tool-adapters.md',
   'automation-selection.md',
   'automation-implementation.md',
+  'test-infrastructure.md',
+  'ai-native-testing.md',
   'visual-a11y-performance-security.md',
   'provider-live-testing.md',
   'flake-triage.md',
@@ -39,6 +41,7 @@ const requiredScripts = [
   'route-inventory.mjs',
   'summarize-test-report.mjs',
   'score-test-readiness.mjs',
+  'validate-testcases.mjs',
   'validate-skill.mjs',
 ];
 
@@ -126,65 +129,11 @@ if (exists('agents/openai.yaml')) {
   if (!yaml.includes('$website-test-automation')) errors.push('agents/openai.yaml default_prompt must mention $website-test-automation.');
 }
 
-const allText = [
-  exists('SKILL.md') ? read('SKILL.md') : '',
-  ...requiredRefs.filter((ref) => exists(`references/${ref}`)).map((ref) => read(`references/${ref}`)),
-].join('\n');
-for (const phrase of [
-  'Test cases first',
-  'Tool Agnostic',
-  'existing project',
-  'knowledge graph',
-  'Redact',
-  'Forward-Test',
-  'Readiness Score',
-  'Scenario Workflow',
-  'Human Reasonableness Review Gate',
-  'human expectation',
-  'documented expectation',
-  'observed behavior',
-  'logic findings ledger',
-  'Post-Test-Case Disposition Gate',
-  'case disposition',
-  'human-logic-risk',
-  'Response-only review',
-  'Automation landing',
-  'Browser smoke',
-  'Failure/flaky triage',
-  'Provider/live testing',
-  'Specialized quality',
-  '80-90',
-  'source_status',
-  'data_needs',
-  'mismatch',
-  'human_expectation',
-  'why_unreasonable',
-  'logic_risk',
-  'suggested_product_fix',
-  'Codex Browser',
-  'Chrome DevTools MCP',
-  'Claude Code browser workflows',
-  'Computer Use',
-  'Provider And Paid Live Testing',
-  'Automation Implementation',
-  'deterministic assertions',
-  'Implemented Automation Summary',
-  'browser-agent smoke evidence',
-  'scoped-skip reason',
-  'specialized quality',
-  'provider/live',
-  'Figma',
-  'Lanhu',
-  'Storybook',
-  'design tokens',
-  'design mismatch',
-]) {
-  const re = new RegExp(phrase, 'i');
-  if (!re.test(allText)) errors.push(`Missing core contract phrase: ${phrase}`);
-}
-if (/Playwright[^.\n]*(only|sole|center)/i.test(allText) && !/Playwright is one adapter family/i.test(allText)) {
-  errors.push('Playwright appears to be positioned as the only path.');
-}
+// Structural invariants are validated above (files, links, frontmatter, workflow order).
+// Detailed prose/content assertions (contract phrases across references, schema fields,
+// adapter coverage) live in tests/run-skill-tests.mjs so wording can evolve without
+// every reword breaking validation. The checks below stay here because they guard the
+// small set of contracts the test suite's negative cases depend on.
 if (exists('assets/testcase-template.yaml')) {
   const template = read('assets/testcase-template.yaml');
   if (!template.includes('source_status:')) errors.push('assets/testcase-template.yaml must include source_status.');

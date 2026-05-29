@@ -57,3 +57,7 @@ unknowns: []
 - Avoid cases whose expected result is only "works".
 - Use `data_needs` for required accounts, records, fixtures, mocks, files, provider state, or reset rules.
 - Avoid automation recommendations when data, auth, or environment control is unknown.
+
+## Validation
+
+Run `scripts/validate-testcases.mjs <file-or-dir>` on generated cases to enforce this schema. It errors on missing core fields, invalid `priority`/`type`/`source_status`/`automation.target` values, and P0/P1 cases without source evidence or an explicit `unknowns` entry; it warns on vague expectations, empty steps, and unfilled schema fields. Accepts a single mapping, a sequence of cases, multi-document YAML, or JSON.

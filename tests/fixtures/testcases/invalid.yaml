@@ -1,0 +1,30 @@
+- id: TC-BAD-001
+  title: Case with invalid enum values
+  source:
+    docs: ["docs/PRD.md"]
+    code: []
+    observed: []
+  source_status: guessed
+  type: smoke
+  priority: P5
+  steps:
+    - Do something
+  expected:
+    - Something happens
+  automation:
+    recommended: false
+    target: someday
+- title: Case missing id and core fields with no evidence
+  source:
+    docs: []
+    code: []
+    observed: []
+  source_status: documented
+  type: e2e
+  priority: P0
+  steps: []
+  expected:
+    - works
+  automation:
+    recommended: false
+    target: manual

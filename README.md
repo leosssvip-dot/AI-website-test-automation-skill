@@ -4,8 +4,8 @@
 
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
-![readiness](https://img.shields.io/badge/readiness-83%2F100-0ea5e9)
+![tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
+![readiness](https://img.shields.io/badge/readiness-89%2F100-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -22,11 +22,14 @@ Repository: `leosssvip-dot/AI-website-test-automation-skill`
 | Coverage analysis | Coverage matrix by workflow, risk, source status, automation layer, current coverage, gaps, and next action. |
 | Automation strategy | Recommendation for API, component, browser smoke, durable E2E, visual, accessibility, performance smoke, security smoke, manual/live, or exploratory coverage. |
 | Test implementation | Targeted automated tests using the repo's existing runner when possible: Playwright, Cypress, Selenium, WebdriverIO, Vitest, Testing Library, route tests, or project-specific scripts. |
+| Test infrastructure | Durable-suite foundations: auth/session reuse, test data lifecycle, selector/test-id strategy, environment bootstrapping, and suite architecture. |
+| AI-native techniques | Agent-driven exploratory crawl into cases, self-healing locators, AI-as-oracle for subjective/visual/copy/a11y judgment, and AI failure triage, with confidence and untrusted-input guardrails. |
 | Browser evidence | Browser-agent smoke checks with screenshots, console/network notes, viewport coverage, mobile overflow checks, and scoped skip reasons. |
 | CI and flaky triage | Failure summaries, retry signals, artifact review, flaky cause hypotheses, and concrete stabilization actions. |
 | Provider/live governance | Safe plans for paid providers and live integrations with cost caps, test accounts, stop conditions, representative completion, callbacks/polling, storage evidence, and redaction. |
 | Specialized quality checks | Visual, accessibility, performance, security-smoke, and design-mismatch checklists. |
 | Readiness scoring | Eight-dimension maturity score plus explicit gaps and recommended next tests. |
+| Test-case validation | Schema check on generated cases: required fields, valid enums, source evidence on P0/P1, and weak-case warnings. |
 
 ## Quick Install
 
@@ -134,6 +137,7 @@ node website-test-automation/scripts/detect-web-test-stack.mjs <repo>
 node website-test-automation/scripts/route-inventory.mjs <repo>
 node website-test-automation/scripts/score-test-readiness.mjs <repo-or-skill>
 node website-test-automation/scripts/summarize-test-report.mjs <report>
+node website-test-automation/scripts/validate-testcases.mjs <file-or-dir>
 node website-test-automation/scripts/validate-skill.mjs website-test-automation
 ```
 

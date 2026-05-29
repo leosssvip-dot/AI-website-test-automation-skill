@@ -526,6 +526,146 @@ test('response-only output template stays focused on target-repo QA output', () 
   assert.match(outputTemplates, /Skill Package Review Notes/i);
 });
 
+test('ai-native testing reference covers agent capabilities with guardrails', () => {
+  const ai = read('website-test-automation/references/ai-native-testing.md');
+  for (const phrase of [
+    'Exploratory crawl',
+    'Self-healing locators',
+    'AI as oracle',
+    'AI failure triage',
+    'confidence',
+    'untrusted input',
+    'prompt-injection',
+    'orientation evidence',
+  ]) {
+    assert.match(ai, new RegExp(phrase, 'i'));
+  }
+  // guardrail: subjective oracle results are not durable regression
+  assert.match(ai, /not durable regression/i);
+  // wired into the skill
+  const skill = read('website-test-automation/SKILL.md');
+  assert.match(skill, /ai-native-testing\.md/);
+});
+
+test('test-infrastructure reference covers durable-suite foundations', () => {
+  const infra = read('website-test-automation/references/test-infrastructure.md');
+  for (const phrase of [
+    'Auth And Session Reuse',
+    'storageState',
+    'Test Data Lifecycle',
+    'teardown',
+    'Selector And Test-ID Strategy',
+    'data-testid',
+    'Environment Bootstrapping',
+    'BASE_URL',
+    'Suite Architecture',
+    'page objects',
+  ]) {
+    assert.match(infra, new RegExp(phrase, 'i'));
+  }
+  // wired into the implementation path
+  const skill = read('website-test-automation/SKILL.md');
+  const implementation = read('website-test-automation/references/automation-implementation.md');
+  assert.match(`${skill}\n${implementation}`, /test-infrastructure\.md/);
+});
+
+test('validate-testcases accepts a schema-complete case file', () => {
+  const result = runRaw('node', [
+    'website-test-automation/scripts/validate-testcases.mjs',
+    'tests/fixtures/testcases/valid.yaml',
+  ]);
+  assert.equal(result.status, 0, `expected pass\n${result.stdout}\n${result.stderr}`);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.totalCases, 1);
+  assert.equal(parsed.errorCount, 0);
+  assert.equal(parsed.warningCount, 0);
+});
+
+test('validate-testcases rejects invalid enums, missing fields, and weak cases', () => {
+  const result = runRaw('node', [
+    'website-test-automation/scripts/validate-testcases.mjs',
+    'tests/fixtures/testcases/invalid.yaml',
+  ]);
+  assert.equal(result.status, 1);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.totalCases, 2);
+  const errors = parsed.errors.join('\n');
+  assert.match(errors, /invalid priority: "P5"/);
+  assert.match(errors, /invalid type: "smoke"/);
+  assert.match(errors, /invalid source_status: "guessed"/);
+  assert.match(errors, /invalid automation\.target: "someday"/);
+  assert.match(errors, /missing required field: id/);
+  assert.match(errors, /P0 case needs at least one source evidence/);
+  assert.match(parsed.warnings.join('\n'), /too vague \("works"\)/);
+});
+
+test('validate-testcases parses sequence, multi-document, and JSON inputs', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcases-'));
+  fs.writeFileSync(
+    path.join(dir, 'multi.yaml'),
+    [
+      'id: TC-A-001',
+      'title: First',
+      'source:',
+      '  docs: ["docs/PRD.md"]',
+      '  code: []',
+      '  observed: []',
+      'source_status: documented',
+      'type: api',
+      'priority: P0',
+      'steps:',
+      '  - call endpoint',
+      'expected:',
+      '  - returns 200',
+      'automation:',
+      '  recommended: false',
+      '  target: api-or-component',
+      '---',
+      'id: TC-A-002',
+      'title: Second',
+      'source:',
+      '  docs: []',
+      '  code: ["src/x.ts"]',
+      '  observed: []',
+      'source_status: inferred',
+      'type: component',
+      'priority: P2',
+      'steps:',
+      '  - render',
+      'expected:',
+      '  - shows label',
+      'automation:',
+      '  recommended: false',
+      '  target: manual',
+    ].join('\n'),
+  );
+  const yamlResult = JSON.parse(run('node', ['website-test-automation/scripts/validate-testcases.mjs', path.join(dir, 'multi.yaml')]));
+  assert.equal(yamlResult.totalCases, 2);
+  assert.equal(yamlResult.ok, true);
+
+  fs.writeFileSync(
+    path.join(dir, 'cases.json'),
+    JSON.stringify([
+      {
+        id: 'TC-J-001',
+        title: 'Json case',
+        source: { docs: ['docs/PRD.md'], code: [], observed: [] },
+        source_status: 'documented',
+        type: 'e2e',
+        priority: 'P1',
+        steps: ['open'],
+        expected: ['ok'],
+        automation: { recommended: false, target: 'manual' },
+      },
+    ]),
+  );
+  const jsonResult = JSON.parse(run('node', ['website-test-automation/scripts/validate-testcases.mjs', path.join(dir, 'cases.json')]));
+  assert.equal(jsonResult.totalCases, 1);
+  assert.equal(jsonResult.ok, true);
+});
+
 test('Cypress template is explicit about non-built-in commands', () => {
   const cypressTemplate = read('website-test-automation/assets/automation-templates/cypress.cy.ts');
   assert.equal(

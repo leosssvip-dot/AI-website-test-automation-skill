@@ -1,0 +1,38 @@
+- id: TC-AUTH-001
+  title: Valid user logs in and lands on dashboard
+  source:
+    docs: ["docs/PRD.md#FR-1"]
+    code: ["src/app/login/page.tsx"]
+    observed: []
+  source_status: documented
+  mismatch: ""
+  human_expectation: "User expects a clear next step after login."
+  why_unreasonable: ""
+  logic_risk: false
+  suggested_product_fix: ""
+  type: e2e
+  priority: P0
+  risk: auth/session
+  persona: registered_user
+  preconditions:
+    - Active user exists
+  steps:
+    - Open login page
+    - Enter valid credentials
+    - Submit form
+  expected:
+    - User reaches dashboard
+    - Session is established
+  negative_cases:
+    - Invalid credentials show a safe error
+  data_needs:
+    - Active test user with known credentials
+  automation:
+    recommended: true
+    target: durable-regression
+    preferred_tools: ["existing browser runner"]
+  evidence:
+    required:
+      - Login route source
+  assumptions: []
+  unknowns: []

@@ -6,7 +6,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 
 1. Select cases whose `automation.recommended` is true and whose data/auth/environment controls are known.
 2. Pick the lowest-cost layer that proves the behavior: API/route, component, browser runner, or browser-agent smoke.
-3. Reuse the project runner, fixtures, test utilities, auth helpers, and naming conventions before adding anything new.
+3. Reuse the project runner, fixtures, test utilities, auth helpers, and naming conventions before adding anything new. Use [test-infrastructure.md](test-infrastructure.md) for auth/session reuse, test data lifecycle, selector strategy, environment bootstrapping, and suite architecture.
 4. Decide file placement from the repo's existing layout; otherwise use a conventional path such as `tests/e2e`, `tests/api`, `src/**/*.test.tsx`, or `cypress/e2e`.
 5. Implement deterministic assertions for state, route, response, DOM, accessibility, network, or artifact outcomes.
 6. Add fixtures only when the case needs stable data. Keep secrets, customer data, and provider payloads out of fixtures.
