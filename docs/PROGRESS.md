@@ -39,4 +39,4 @@
 
 ## Latest Verification Summary
 
-- 2026-06-03: `npm run validate` passed 33 repository tests plus agent-workflow validation; `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed; `score-test-readiness.mjs` reported a calibrated `overallScore` of 89; new reference cross-links verified with no dead links. The installed `~/.codex` copy was not re-synced and `quick_validate.py` was not re-run this session.
+- 2026-06-03: `npm run validate` passed 33 repository tests plus agent-workflow validation; `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed; `score-test-readiness.mjs` reported a calibrated `overallScore` of 89; new reference cross-links verified with no dead links. Changes were committed to `main`, pushed to GitHub, and synced to `~/.codex/skills/website-test-automation` (installed copy verified identical via `diff -qr` and re-validated). `quick_validate.py` was not re-run this session.
