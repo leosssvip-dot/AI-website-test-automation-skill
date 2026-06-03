@@ -8,7 +8,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 2. Pick the lowest-cost layer that proves the behavior: API/route, component, browser runner, or browser-agent smoke.
 3. Reuse the project runner, fixtures, test utilities, auth helpers, and naming conventions before adding anything new. Use [test-infrastructure.md](test-infrastructure.md) for auth/session reuse, test data lifecycle, selector strategy, environment bootstrapping, and suite architecture.
 4. Decide file placement from the repo's existing layout; otherwise use a conventional path such as `tests/e2e`, `tests/api`, `src/**/*.test.tsx`, or `cypress/e2e`.
-5. Implement deterministic assertions for state, route, response, DOM, accessibility, network, or artifact outcomes.
+5. Implement deterministic assertions for state, route, response, DOM, accessibility, network, or artifact outcomes. Judge assertion strength with [test-quality.md](test-quality.md), and for API, route, or service boundaries follow [api-contract-testing.md](api-contract-testing.md) for contract and state verification.
 6. Add fixtures only when the case needs stable data. Keep secrets, customer data, and provider payloads out of fixtures.
 7. For complete automation landing tasks, collect at least one browser-agent smoke evidence item, such as a screenshot, console/network summary, mobile overflow check, upload interaction, or local-only network-negative observation. Skip this only when the user explicitly limited scope to API, component, or unit tests, and record the scoped-skip reason.
 8. Run the narrowest command that covers the new tests, then report command, result, failures, and artifacts.

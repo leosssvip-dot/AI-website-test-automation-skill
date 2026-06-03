@@ -35,7 +35,8 @@
 - 2026-05-28: Aligned the main skill workflow order so coverage analysis precedes case disposition, with regression tests and validator coverage.
 - 2026-05-28: Patched review follow-up findings for Pages Router index inventory, readiness score calibration, schema-complete examples, and response-only output scope.
 - 2026-05-28: Added a Human Reasonableness Review Gate so agents compare documented expectation, observed behavior, and human expectation before accepting product logic.
+- 2026-06-03: Reviewed and broadened the skill: reconciled the README readiness badge (89 → 83 calibrated) and the stale test count, added an end-to-end worked example on the auth-crud fixture, added `api-contract-testing.md` and `test-quality.md` references for web-QA depth, and added `service-and-library-testing.md` plus a broadened SKILL.md description/scope covering backend/service/CLI/library surfaces while keeping the website core and name.
 
 ## Latest Verification Summary
 
-- `npm run validate` passed 27 repository tests and workflow validation. `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed. Installed skill validation passed and `diff -qr website-test-automation /Users/chenyang/.codex/skills/website-test-automation` produced no differences. `quick_validate.py website-test-automation` returned `Skill is valid!`. `git diff --check` passed.
+- 2026-06-03: `npm run validate` passed 33 repository tests plus agent-workflow validation; `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed; `score-test-readiness.mjs` reported a calibrated `overallScore` of 89; new reference cross-links verified with no dead links. The installed `~/.codex` copy was not re-synced and `quick_validate.py` was not re-run this session.

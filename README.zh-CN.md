@@ -5,8 +5,8 @@
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
 ![tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
-![readiness](https://img.shields.io/badge/readiness-89%2F100-0ea5e9)
-![scope](https://img.shields.io/badge/scope-website%20QA%20automation-7c3aed)
+![readiness](https://img.shields.io/badge/readiness-83%2F100%20calibrated-0ea5e9)
+![scope](https://img.shields.io/badge/scope-web%20%26%20service%20QA-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 面向网站和 Web App 的通用 AI Agent 测试用例设计、覆盖分析和自动化落地 Skill。
@@ -23,6 +23,8 @@
 | 自动化策略 | 推荐 API、组件、浏览器 smoke、稳定 E2E、视觉、可访问性、性能 smoke、安全 smoke、manual/live 或 exploratory 覆盖方式。 |
 | 测试落地 | 尽量使用目标项目已有 runner 落地测试：Playwright、Cypress、Selenium、WebdriverIO、Vitest、Testing Library、route tests 或项目自定义脚本。 |
 | 测试基础设施 | 稳定套件的地基：auth/session 复用、测试数据生命周期、选择器/test-id 策略、环境引导和套件架构。 |
+| API、契约与服务测试 | 对 web 产品背后的路由、API、任务、CLI 和共享库做契约和状态验证：状态码/响应结构/错误契约、鉴权/IDOR、幂等、持久化状态回读和向后兼容检查。 |
+| 测试质量评审 | 基于断言强度和变异思维的评审，识别同义反复、过度 mock 或天生 flaky 的测试，把覆盖率当作地图而非分数。 |
 | AI 原生能力 | Agent 驱动的探索式爬取转用例、自愈选择器、AI 作为 oracle 做主观/视觉/文案/可访问性判断、AI 失败归因，并带 confidence 和不可信输入护栏。 |
 | 浏览器证据 | 通过 browser-agent 做 smoke 检查，输出截图、console/network 发现、viewport 覆盖、移动端溢出检查和 scoped skip reason。 |
 | CI 和 flaky 分析 | 汇总失败、retry 信号和 artifact，判断 flaky 原因，并给出稳定化动作。 |
@@ -150,7 +152,7 @@ node website-test-automation/scripts/score-test-readiness.mjs website-test-autom
 
 ## 范围
 
-这个 skill 聚焦网站和 Web App 的 QA 自动化。它不是原生移动端、桌面端、硬件测试、压测、深度安全测试、设备云调度或完整视觉基线管理平台。
+这个 skill 以网站和 Web App 的 QA 自动化为核心，同时覆盖这些产品依赖的 API、后端服务、任务/队列、CLI 和共享库——用例、覆盖、测试质量和归因模型与具体形态无关，只有浏览器适配器是 Web 专属的。它不是原生移动端、桌面端、硬件测试、压测、深度安全测试、设备云调度或完整视觉基线管理平台。
 
 ## 安全边界
 

@@ -35,6 +35,10 @@ const requiredRefs = [
   'flake-triage.md',
   'ci-reporting.md',
   'output-templates.md',
+  'worked-example.md',
+  'api-contract-testing.md',
+  'test-quality.md',
+  'service-and-library-testing.md',
 ];
 const requiredScripts = [
   'detect-web-test-stack.mjs',

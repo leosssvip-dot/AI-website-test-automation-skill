@@ -10,7 +10,7 @@ Test cases first. Browser automation is an implementation choice after product-g
 - Permission and role access.
 - State transition.
 - Data lifecycle.
-- API contract.
+- API contract (see [api-contract-testing.md](api-contract-testing.md)).
 - Responsive and cross-browser.
 - Accessibility.
 - Visual regression.
