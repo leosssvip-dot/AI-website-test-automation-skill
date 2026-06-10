@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="vitest" tests="4" failures="1" errors="0" skipped="1">
+  <testsuite name="projects-route" tests="4" failures="1" errors="0" skipped="1" time="1.24">
+    <testcase classname="projects-route" name="returns 201 and echoes the submitted name" time="0.41"/>
+    <testcase classname="projects-route" name="rejects a missing name" time="0.18">
+      <failure message="expected 400 to be 201" type="AssertionError">AssertionError: expected 400 to be 201
+    at tests/api/projects-route.test.ts:21:5</failure>
+    </testcase>
+    <testcase classname="projects-route" name="lists projects for the account" time="0.33"/>
+    <testcase classname="projects-route" name="archives a project" time="0">
+      <skipped/>
+    </testcase>
+    <!-- commented-out testcases must not be counted:
+    <testcase classname="projects-route" name="renames a project" time="0.1"/>
+    -->
+  </testsuite>
+</testsuites>

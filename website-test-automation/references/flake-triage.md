@@ -23,8 +23,9 @@ Use traces, screenshots, videos, console logs, network logs, and report output b
 1. Reproduce or summarize the failure from reports before editing code.
 2. Classify the likely category and record confidence.
 3. Check whether the failure is a product regression, test bug, data issue, or environment issue.
-4. Fix the narrowest cause and rerun the specific failing case.
-5. Broaden to the containing suite only after the focused case passes.
+4. File product regressions as defects with [defect-reporting.md](defect-reporting.md); never loosen the test to make a product bug pass.
+5. Fix the narrowest cause and rerun the specific failing case.
+6. Broaden to the containing suite only after the focused case passes.
 
 For agent-driven classification of traces, console, and network evidence, see [ai-native-testing.md](ai-native-testing.md). Treat each classification as a hypothesis with confidence and confirm it before editing.
 

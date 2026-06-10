@@ -8,8 +8,9 @@ Use this workflow for website QA planning, test case generation, automation, and
 2. If the user asks for test cases, start with product understanding and test case authoring, then run the Post-Test-Case Disposition Gate.
 3. If the user asks for automation, confirm whether test cases already exist. If not, create or infer them first, then choose which cases are automated now.
 4. If the user asks for a quick smoke, exploratory run, screenshot, console/network check, or visual inspection, browser-agent tools may run before durable test files exist, but findings must be converted into cases, gaps, or risk notes.
-5. If a repo has an existing test framework, prefer it for durable regression work.
-6. If repo size or cross-doc architecture makes context unclear, use graph context before finalizing cases.
+5. If there is no source-code access, follow [black-box-testing.md](black-box-testing.md): evidence comes from docs, design artifacts, and observed browser behavior, and automation advice stays within tester-controlled accounts, data, and environments.
+6. If a repo has an existing test framework, prefer it for durable regression work.
+7. If repo size or cross-doc architecture makes context unclear, use graph context before finalizing cases.
 
 ## Steps
 

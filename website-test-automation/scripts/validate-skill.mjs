@@ -39,6 +39,10 @@ const requiredRefs = [
   'api-contract-testing.md',
   'test-quality.md',
   'service-and-library-testing.md',
+  'test-design-techniques.md',
+  'exploratory-testing.md',
+  'defect-reporting.md',
+  'black-box-testing.md',
 ];
 const requiredScripts = [
   'detect-web-test-stack.mjs',
@@ -46,6 +50,7 @@ const requiredScripts = [
   'summarize-test-report.mjs',
   'score-test-readiness.mjs',
   'validate-testcases.mjs',
+  'export-testcases.mjs',
   'validate-skill.mjs',
 ];
 
@@ -58,6 +63,7 @@ for (const rel of [
   'assets/testcase-template.yaml',
   'assets/coverage-matrix-template.md',
   'assets/readiness-score-template.md',
+  'assets/checklists/exploratory-charter.md',
   'assets/checklists/browser-smoke-evidence.md',
   'assets/checklists/flaky-ci-triage.md',
   'assets/checklists/provider-live-test-plan.md',

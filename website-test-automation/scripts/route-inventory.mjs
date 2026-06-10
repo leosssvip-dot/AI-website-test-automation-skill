@@ -75,6 +75,11 @@ for (const file of routeFiles) {
     add(rel.includes('/api/') ? 'next-api-route' : 'next-pages-route', toPagesRoutePath(raw), file, 'high');
   }
 
+  if (/^(src\/)?pages\/.*\.vue$/.test(rel)) {
+    const raw = rel.replace(/^(src\/)?pages\//, '').replace(/\.vue$/, '');
+    add('nuxt-pages-route', toPagesRoutePath(raw), file, 'high');
+  }
+
   for (const match of content.matchAll(/\b(?:app|router)\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/g)) {
     add('server-route', `${match[1].toUpperCase()} ${match[2]}`, file, 'medium');
   }

@@ -19,6 +19,10 @@ Test cases first. Browser automation is an implementation choice after product-g
 - i18n and localization.
 - Human logic and reasonableness.
 
+## Deriving Cases
+
+Apply [test-design-techniques.md](test-design-techniques.md) — equivalence partitioning, boundary values, decision tables, state transitions, pairwise combinations, and error guessing — to derive these case types systematically instead of listing only happy paths.
+
 ## Quality Rubric
 
 A useful test case must:

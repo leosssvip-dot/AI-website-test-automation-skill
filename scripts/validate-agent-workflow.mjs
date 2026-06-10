@@ -2,9 +2,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const validStatuses = new Set(['Planned', 'In Progress', 'Blocked', 'Verifying', 'Done', 'Superseded']);
 
 function read(rel) {

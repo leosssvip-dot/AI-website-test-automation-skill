@@ -4,7 +4,7 @@
 
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100%20calibrated-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-web%20%26%20service%20QA-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)
@@ -19,6 +19,8 @@
 | --- | --- |
 | 产品和仓库理解 | 基于 PRD、计划文档、源码、路由、API、已有测试、报告、截图、Storybook、Figma、design tokens 和设计材料建立产品模型。 |
 | 有来源证据的测试用例 | 生成 P0/P1/P2 用例，包含来源证据、风险、优先级、前置条件、步骤、期望结果、数据需求、负向用例、假设和未知项。 |
+| 测试设计方法 | 系统化用例推导：等价类划分、边界值分析、判定表、状态迁移、pairwise 组合和错误猜测。 |
+| 黑盒 / 仅 URL 测试 | 无源码权限时的 QA 流程：基于文档和浏览器观察证据建模，受限的自动化建议，以及权限升级清单。 |
 | 覆盖分析 | 按 workflow、risk、source status、automation layer、当前覆盖、缺口和下一步生成覆盖矩阵。 |
 | 自动化策略 | 推荐 API、组件、浏览器 smoke、稳定 E2E、视觉、可访问性、性能 smoke、安全 smoke、manual/live 或 exploratory 覆盖方式。 |
 | 测试落地 | 尽量使用目标项目已有 runner 落地测试：Playwright、Cypress、Selenium、WebdriverIO、Vitest、Testing Library、route tests 或项目自定义脚本。 |
@@ -27,11 +29,14 @@
 | 测试质量评审 | 基于断言强度和变异思维的评审，识别同义反复、过度 mock 或天生 flaky 的测试，把覆盖率当作地图而非分数。 |
 | AI 原生能力 | Agent 驱动的探索式爬取转用例、自愈选择器、AI 作为 oracle 做主观/视觉/文案/可访问性判断、AI 失败归因，并带 confidence 和不可信输入护栏。 |
 | 浏览器证据 | 通过 browser-agent 做 smoke 检查，输出截图、console/network 发现、viewport 覆盖、移动端溢出检查和 scoped skip reason。 |
-| CI 和 flaky 分析 | 汇总失败、retry 信号和 artifact，判断 flaky 原因，并给出稳定化动作。 |
+| CI 和 flaky 分析 | 汇总失败（Playwright 风格 JSON 和 JUnit XML）、retry 信号和 artifact，判断 flaky 原因，并给出稳定化动作。 |
+| 探索式测试 | 带 charter 和 timebox 的探索式测试会话，记录过程并在 debrief 中转化为用例、缺陷和覆盖矩阵行。 |
+| 缺陷报告 | 可复现的缺陷报告：严重程度/优先级判定、生命周期和回归规则、脱敏证据。 |
 | Provider/live 治理 | 为付费 provider 和 live integration 设计安全测试计划，包含 cost cap、test account、stop condition、代表性完成证据、callback/polling、存储证据和脱敏规则。 |
 | 专项质量检查 | 提供视觉、可访问性、性能、安全 smoke 和 design mismatch 检查清单。 |
 | 成熟度评分 | 输出八个维度的成熟度评分、明确缺口和下一批推荐测试。 |
 | 测试用例校验 | 对生成的用例做 schema 校验：必填字段、合法枚举、P0/P1 来源证据,以及弱用例警告。 |
+| 测试用例导出 | 导出 CSV（TestRail/Xray/禅道风格的用例管理导入列）或 Markdown 评审表格。 |
 
 ## 快速安装
 
@@ -57,16 +62,26 @@ mkdir -p ~/.codex/skills
 rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
 ```
 
+Claude Code 本地 skill 示例（个人级安装）：
+
+```bash
+mkdir -p ~/.claude/skills
+rsync -a --delete website-test-automation/ ~/.claude/skills/website-test-automation/
+```
+
+项目级 Claude Code 安装：把整个目录复制到目标仓库的 `.claude/skills/website-test-automation/`。
+
 ## 更新方法
 
 直接交给 AI coding agent：`请更新这个 skill：https://github.com/leosssvip-dot/AI-website-test-automation-skill`
 
-手动更新已 clone 的仓库和 Codex-compatible 本地 skill：
+手动更新已 clone 的仓库和本地 skill 安装：
 
 ```bash
 cd AI-website-test-automation-skill
 git pull --ff-only
-rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/
+rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automation/   # Codex
+rsync -a --delete website-test-automation/ ~/.claude/skills/website-test-automation/  # Claude Code
 ```
 
 ## Agent 兼容性
@@ -111,6 +126,14 @@ rsync -a --delete website-test-automation/ ~/.codex/skills/website-test-automati
 使用 website-test-automation skill package 为最高风险页面补充视觉、可访问性、性能 smoke 和安全 smoke 检查。
 ```
 
+```text
+使用 website-test-automation skill package 对 <URL> 做黑盒测试，需求以这份 PRD 为准。基于文档和浏览器观察证据建立产品模型，生成 observed/inferred 用例，执行带 charter 的探索式测试，并输出缺陷报告和权限升级清单。
+```
+
+```text
+使用 website-test-automation skill package 把生成的测试用例导出为 CSV，供我们的用例管理工具导入。
+```
+
 ## 成熟度评估
 
 当前 `website-test-automation` 公开 README 口径评分：
@@ -140,6 +163,7 @@ node website-test-automation/scripts/route-inventory.mjs <repo>
 node website-test-automation/scripts/score-test-readiness.mjs <repo-or-skill>
 node website-test-automation/scripts/summarize-test-report.mjs <report>
 node website-test-automation/scripts/validate-testcases.mjs <file-or-dir>
+node website-test-automation/scripts/export-testcases.mjs <file-or-dir> --format csv|md
 node website-test-automation/scripts/validate-skill.mjs website-test-automation
 ```
 

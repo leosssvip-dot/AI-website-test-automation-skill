@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 function usage() {
-  console.log('Usage: summarize-test-report.mjs <report-file-or-dir> [--format json|md]\nSummarizes common JSON/JUnit-like test report data where feasible.');
+  console.log('Usage: summarize-test-report.mjs <report-file-or-dir> [--format json|md]\nSummarizes JSON (Playwright-style) and JUnit XML test reports where feasible.');
 }
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
@@ -27,16 +27,53 @@ if (!fs.existsSync(target)) {
   process.exit(2);
 }
 
-function collectJsonFiles(p) {
+const REPORT_EXT = /\.(json|xml)$/;
+
+function collectReportFiles(p) {
   const stat = fs.statSync(p);
-  if (stat.isFile()) return p.endsWith('.json') ? [p] : [];
+  if (stat.isFile()) return REPORT_EXT.test(p) ? [p] : [];
   const out = [];
   for (const entry of fs.readdirSync(p, { withFileTypes: true })) {
     const full = path.join(p, entry.name);
-    if (entry.isDirectory()) out.push(...collectJsonFiles(full));
-    else if (entry.name.endsWith('.json')) out.push(full);
+    if (entry.isDirectory()) out.push(...collectReportFiles(full));
+    else if (REPORT_EXT.test(entry.name)) out.push(full);
   }
   return out;
+}
+
+function decodeXml(value) {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// JUnit XML: count <testcase> entries; a nested <failure>/<error> means failed,
+// <skipped> means skipped, otherwise passed. Returns how many testcases were seen.
+function visitJUnit(xml, counts, failures) {
+  // Strip XML comments so a commented-out testcase is not counted, then use a
+  // lazy attribute match so a self-closing `<testcase .../>` ends its own match
+  // instead of backtracking into the next testcase's closing tag.
+  const stripped = xml.replace(/<!--[\s\S]*?-->/g, '');
+  const testcases = stripped.match(/<testcase\b[^>]*?(?:\/>|>[\s\S]*?<\/testcase>)/g) || [];
+  for (const testcase of testcases) {
+    const title = decodeXml(testcase.match(/\bname="([^"]*)"/)?.[1] || 'unknown test');
+    if (/<(failure|error)\b/.test(testcase)) {
+      counts.failed += 1;
+      failures.push({
+        title,
+        status: 'failed',
+        message: decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || ''),
+      });
+    } else if (/<skipped\b/.test(testcase)) {
+      counts.skipped += 1;
+    } else {
+      counts.passed += 1;
+    }
+  }
+  return testcases.length;
 }
 
 function findTitle(stack) {
@@ -73,15 +110,24 @@ function visit(value, counts, failures = [], artifacts = [], stack = []) {
   for (const child of Object.values(value)) visit(child, counts, failures, artifacts, nextStack);
 }
 
-const files = collectJsonFiles(target).slice(0, 20);
+const files = collectReportFiles(target).slice(0, 20);
 const counts = { passed: 0, failed: 0, skipped: 0, retried: 0 };
 const failures = [];
 const artifacts = [];
 const unsupported = [];
+let jsonFilesRead = 0;
+let xmlFilesRead = 0;
 
 for (const file of files) {
+  if (file.endsWith('.xml')) {
+    const seen = visitJUnit(fs.readFileSync(file, 'utf8'), counts, failures);
+    if (seen > 0) xmlFilesRead += 1;
+    else unsupported.push(path.relative(process.cwd(), file));
+    continue;
+  }
   try {
     visit(JSON.parse(fs.readFileSync(file, 'utf8')), counts, failures, artifacts);
+    jsonFilesRead += 1;
   } catch {
     unsupported.push(path.relative(process.cwd(), file));
   }
@@ -89,7 +135,8 @@ for (const file of files) {
 
 const summary = {
   reportPath: target,
-  jsonFilesRead: files.length - unsupported.length,
+  jsonFilesRead,
+  xmlFilesRead,
   unsupported,
   counts,
   failures,
@@ -101,6 +148,7 @@ if (format === 'md') {
   console.log(`## Test Report Summary
 
 - JSON files read: ${summary.jsonFilesRead}
+- JUnit XML files read: ${summary.xmlFilesRead}
 - Passed signals: ${counts.passed}
 - Failed signals: ${counts.failed}
 - Skipped signals: ${counts.skipped}

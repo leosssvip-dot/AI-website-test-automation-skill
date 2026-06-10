@@ -6,7 +6,7 @@ Not every test case should become a durable browser test.
 
 - `durable-regression`: stable, repeatable CI check.
 - `browser-agent-smoke`: quick exploratory or release confidence check.
-- `exploratory`: human or agent exploration with evidence.
+- `exploratory`: human or agent exploration with evidence, run as a chartered session ([exploratory-testing.md](exploratory-testing.md)).
 - `manual`: manual-only due cost, instability, or subjective judgement.
 - `api-or-component`: cheaper layer gives the same confidence.
 - `not-automated-risk-note`: keep the risk visible but do not automate yet.

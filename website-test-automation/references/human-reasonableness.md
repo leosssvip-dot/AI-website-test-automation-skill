@@ -60,6 +60,7 @@ decision_needed: ""
 - If the logic is unclear but high-risk, create an exploratory or manual case with `source_status: mismatch`.
 - If current behavior is temporarily intentional, document it as a characterization test and include the reason.
 - If the issue is only copy, layout, or discoverability, still record the human expectation and route it to visual, accessibility, or exploratory coverage as appropriate.
+- If the implementation is broken outright rather than a logic-design question, file it as a defect with [defect-reporting.md](defect-reporting.md) and link the ledger entry.
 
 ## Evidence Standard
 

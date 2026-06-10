@@ -10,6 +10,8 @@
 - Automation Handoff
 - Implemented Automation Summary
 - Failure Triage
+- Defect Report
+- Release Test Plan
 
 ## Coverage Summary
 
@@ -198,4 +200,40 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Likely cause:
 - Fix:
 - Verification:
+```
+
+## Defect Report
+
+Use this with [defect-reporting.md](defect-reporting.md) when a product bug is confirmed.
+
+```markdown
+## Defect Report
+- ID / title:
+- Severity / priority:
+- Environment (URL/build, browser, viewport, account/role):
+- Preconditions:
+- Steps to reproduce:
+- Expected result (source evidence):
+- Actual result (evidence paths):
+- Scope / regression notes:
+- Related case or logic finding IDs:
+- Redaction note:
+```
+
+## Release Test Plan
+
+Use this when the request is release-scoped and needs entry/exit criteria, not only a coverage matrix.
+
+```markdown
+## Release Test Plan
+- Release and scope:
+- Out of scope:
+- Entry criteria:
+- Exit criteria:
+- Environments and accounts:
+- Test data needs:
+- Schedule and owners:
+- Risks and contingencies:
+- Coverage source (matrix link):
+- Readiness gate (score link):
 ```

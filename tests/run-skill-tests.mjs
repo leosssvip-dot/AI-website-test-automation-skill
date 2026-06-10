@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const skillRoot = path.join(repoRoot, 'website-test-automation');
 
 function read(rel) {
@@ -664,6 +665,150 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
   const jsonResult = JSON.parse(run('node', ['website-test-automation/scripts/validate-testcases.mjs', path.join(dir, 'cases.json')]));
   assert.equal(jsonResult.totalCases, 1);
   assert.equal(jsonResult.ok, true);
+
+  // A JSON array of scalars must report "no test cases found", not crash.
+  fs.writeFileSync(path.join(dir, 'scalars.json'), '[1, "two"]');
+  const scalarResult = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', path.join(dir, 'scalars.json')]);
+  assert.equal(scalarResult.status, 1);
+  assert.match(scalarResult.stdout, /no test cases found/);
+});
+
+test('tester-facing references cover design techniques, exploratory, defects, and black-box', () => {
+  const techniques = read('website-test-automation/references/test-design-techniques.md');
+  for (const phrase of ['Equivalence Partitioning', 'Boundary Value', 'Decision Table', 'State Transition', 'Pairwise', 'Error Guessing']) {
+    assert.match(techniques, new RegExp(phrase, 'i'));
+  }
+  const exploratory = read('website-test-automation/references/exploratory-testing.md');
+  for (const phrase of ['Charter', 'timebox', 'Debrief', 'persona']) {
+    assert.match(exploratory, new RegExp(phrase, 'i'));
+  }
+  const defects = read('website-test-automation/references/defect-reporting.md');
+  for (const phrase of ['Severity', 'priority', 'reproduce', 'root cause', 'Redact']) {
+    assert.match(defects, new RegExp(phrase, 'i'));
+  }
+  const blackBox = read('website-test-automation/references/black-box-testing.md');
+  for (const phrase of ['URL-only', 'observed', 'escalation', 'Automation Boundary']) {
+    assert.match(blackBox, new RegExp(phrase, 'i'));
+  }
+  assert.equal(exists('website-test-automation/assets/checklists/exploratory-charter.md'), true);
+  // wired into the skill
+  const skill = read('website-test-automation/SKILL.md');
+  for (const ref of ['test-design-techniques.md', 'exploratory-testing.md', 'defect-reporting.md', 'black-box-testing.md']) {
+    assert.match(skill, new RegExp(ref));
+  }
+});
+
+test('scenario workflows include a black-box URL-only path', () => {
+  const scenarios = read('website-test-automation/references/scenario-workflows.md');
+  assert.match(scenarios, /Black-box \/ URL-only/i);
+  assert.match(scenarios, /black-box-testing\.md/);
+  assert.match(scenarios, /escalation list/i);
+});
+
+test('output templates include defect report and release test plan', () => {
+  const outputTemplates = read('website-test-automation/references/output-templates.md');
+  assert.match(outputTemplates, /## Defect Report/);
+  assert.match(outputTemplates, /Steps to reproduce/);
+  assert.match(outputTemplates, /## Release Test Plan/);
+  assert.match(outputTemplates, /Entry criteria/);
+  assert.match(outputTemplates, /Exit criteria/);
+});
+
+test('export-testcases converts schema cases to CSV and markdown', () => {
+  const csv = run('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    'tests/fixtures/testcases/valid.yaml',
+    '--format',
+    'csv',
+  ]);
+  const lines = csv.split('\n');
+  assert.match(lines[0], /^"ID","Title","Priority","Type"/);
+  assert.match(csv, /TC-AUTH-001/);
+  assert.match(csv, /"1\. Open login page\n2\. Enter valid credentials\n3\. Submit form"/);
+
+  const md = run('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    'tests/fixtures/testcases/valid.yaml',
+    '--format',
+    'md',
+  ]);
+  assert.match(md, /^\| ID \| Title \| Priority \|/);
+  assert.match(md, /TC-AUTH-001/);
+  assert.match(md, /<br>/);
+
+  // Edge cases: bracket-prefixed plain scalars survive intact, formula-leading
+  // cells get a defensive prefix, bad --out exits 2, parse errors exit 1.
+  const edgeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'export-edge-'));
+  fs.writeFileSync(
+    path.join(edgeDir, 'edge.yaml'),
+    [
+      'id: TC-EDGE-001',
+      'title: [Smoke] Login works',
+      'source:',
+      '  docs: ["docs/PRD.md"]',
+      '  code: []',
+      '  observed: []',
+      'source_status: documented',
+      'type: e2e',
+      'priority: P2',
+      'steps:',
+      '  - Open login page',
+      'expected:',
+      '  - =HYPERLINK("http://evil.example","x")',
+      'automation:',
+      '  recommended: false',
+      '  target: manual',
+    ].join('\n'),
+  );
+  const edgeCsv = run('node', ['website-test-automation/scripts/export-testcases.mjs', path.join(edgeDir, 'edge.yaml')]);
+  assert.match(edgeCsv, /\[Smoke\] Login works/);
+  assert.match(edgeCsv, /"'=HYPERLINK\(""http:\/\/evil\.example"",""x""\)"/);
+
+  const badOut = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    'tests/fixtures/testcases/valid.yaml',
+    '--out',
+    path.join(edgeDir, 'no-such-dir', 'out.csv'),
+  ]);
+  assert.equal(badOut.status, 2);
+  assert.match(badOut.stderr, /Cannot write output file/);
+
+  fs.writeFileSync(path.join(edgeDir, 'broken.json'), '{not json');
+  const partial = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    path.join(edgeDir, 'broken.json'),
+    path.join(edgeDir, 'edge.yaml'),
+  ]);
+  assert.equal(partial.status, 1);
+  assert.match(partial.stderr, /parse error/);
+  assert.match(partial.stdout, /TC-EDGE-001/);
+});
+
+test('summarize-test-report parses JUnit XML reports', () => {
+  const result = runJson('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    'tests/fixtures/reports/junit-sample.xml',
+  ]);
+  assert.equal(result.counts.passed, 2);
+  assert.equal(result.counts.failed, 1);
+  assert.equal(result.counts.skipped, 1);
+  assert.equal(result.xmlFilesRead, 1);
+  assert.match(result.failures[0].title, /rejects a missing name/);
+  assert.match(result.failures[0].message, /expected 400 to be 201/);
+});
+
+test('route-inventory discovers Nuxt-style vue pages', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'nuxt-route-inventory-'));
+  fs.mkdirSync(path.join(fixture, 'pages', 'projects'), { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'pages', 'index.vue'), '<template><div /></template>');
+  fs.writeFileSync(path.join(fixture, 'pages', 'about.vue'), '<template><div /></template>');
+  fs.writeFileSync(path.join(fixture, 'pages', 'projects', '[id].vue'), '<template><div /></template>');
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const routes = result.routes.map((route) => route.route);
+  assert.equal(routes.includes('/'), true);
+  assert.equal(routes.includes('/about'), true);
+  assert.equal(routes.includes('/projects/[id]'), true);
 });
 
 test('Cypress template is explicit about non-built-in commands', () => {

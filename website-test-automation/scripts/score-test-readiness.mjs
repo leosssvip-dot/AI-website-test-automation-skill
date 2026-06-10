@@ -157,6 +157,7 @@ console.log(JSON.stringify({
   contractScore,
   overallScore,
   level,
+  measurementNote: 'Scores measure process evidence found in files (docs, templates, scripts, test files); the scorer does not execute tests or measure runtime coverage.',
   evidenceCalibration: {
     hasProvenRealProjectEvidence,
     note: hasProvenRealProjectEvidence ?

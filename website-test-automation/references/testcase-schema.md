@@ -36,6 +36,8 @@ assumptions: []
 unknowns: []
 ```
 
+`scripts/validate-testcases.mjs` errors when `id`, `title`, `source`, `source_status`, `type`, `priority`, `steps`, `expected`, or `automation` is missing; every other schema field is still expected, and an absent field produces a warning rather than an error.
+
 ## Valid Values
 
 - `priority`: `P0`, `P1`, `P2`, `P3`
@@ -61,3 +63,7 @@ unknowns: []
 ## Validation
 
 Run `scripts/validate-testcases.mjs <file-or-dir>` on generated cases to enforce this schema. It errors on missing core fields, invalid `priority`/`type`/`source_status`/`automation.target` values, and P0/P1 cases without source evidence or an explicit `unknowns` entry; it warns on vague expectations, empty steps, and unfilled schema fields. Accepts a single mapping, a sequence of cases, multi-document YAML, or JSON.
+
+The bundled zero-dependency parser supports plain and quoted scalars, flow and block sequences, nested mappings, multi-document YAML, and JSON. It does not support block scalars (`|`, `>`), anchors, or trailing `#` comments after values — keep each step and expectation on a single line. A value that both starts and ends with brackets parses as a flow collection; quote it (e.g. `"[Smoke]"`) when it is meant as text.
+
+Run `scripts/export-testcases.mjs <file-or-dir> --format csv|md` to convert validated cases into a CSV for test-management import (TestRail/Xray/ZenTao-style columns) or a Markdown review table.

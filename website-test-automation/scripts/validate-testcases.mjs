@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
 import path from 'node:path';
+import { collectCaseFiles, loadCases } from './lib/yaml-testcases.mjs';
 
 function usage() {
   console.log(
     'Usage: validate-testcases.mjs <file-or-dir> [more files...] [--format json|md]\n' +
       'Validates generated test-case YAML/JSON against references/testcase-schema.md.\n' +
       'Accepts a single mapping, a sequence of cases, multi-document YAML, or JSON.\n' +
+      'YAML subset: no block scalars (`|`, `>`), anchors, or trailing comments.\n' +
       'Exit code 1 when any case has a schema error, 2 on usage/path errors.',
   );
 }
@@ -44,171 +45,6 @@ const SCHEMA_FIELDS = [
   'negative_cases', 'data_needs', 'automation', 'evidence', 'assumptions', 'unknowns',
 ];
 
-// --- Minimal YAML-subset parser (zero-dependency) -------------------------
-// Handles the fixed test-case shape: 2-level mappings, block/flow sequences,
-// quoted/plain scalars, booleans, numbers, and `---` multi-document files.
-function indentOf(line) {
-  return line.match(/^(\s*)/)[1].replace(/\t/g, '  ').length;
-}
-
-function parseScalar(raw) {
-  const value = raw.trim();
-  if (value === '' || value === '~' || value === 'null') return null;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
-  if (value.startsWith('[')) return parseFlowSeq(value);
-  if (value.startsWith('{')) return parseFlowMap(value);
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-    return value.slice(1, -1);
-  }
-  return value;
-}
-
-function splitTopLevel(body) {
-  const parts = [];
-  let depth = 0;
-  let quote = null;
-  let current = '';
-  for (const char of body) {
-    if (quote) {
-      current += char;
-      if (char === quote) quote = null;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      current += char;
-      continue;
-    }
-    if (char === '[' || char === '{') depth += 1;
-    if (char === ']' || char === '}') depth -= 1;
-    if (char === ',' && depth === 0) {
-      parts.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-  if (current.trim() !== '') parts.push(current);
-  return parts;
-}
-
-function parseFlowSeq(value) {
-  const body = value.slice(1, -1).trim();
-  if (body === '') return [];
-  return splitTopLevel(body).map((part) => parseScalar(part));
-}
-
-function parseFlowMap(value) {
-  const body = value.slice(1, -1).trim();
-  const map = {};
-  if (body === '') return map;
-  for (const part of splitTopLevel(body)) {
-    const idx = part.indexOf(':');
-    if (idx === -1) continue;
-    map[part.slice(0, idx).trim()] = parseScalar(part.slice(idx + 1));
-  }
-  return map;
-}
-
-function childBlock(lines, start, baseIndent) {
-  let end = start + 1;
-  while (end < lines.length && indentOf(lines[end]) > baseIndent) end += 1;
-  return { block: lines.slice(start + 1, end), end };
-}
-
-function parseLines(lines) {
-  if (lines.length === 0) return null;
-  const baseIndent = Math.min(...lines.map(indentOf));
-  const firstAtBase = lines.find((line) => indentOf(line) === baseIndent);
-  const isSequence = /^-(\s|$)/.test(firstAtBase.trim());
-
-  if (isSequence) {
-    const items = [];
-    let i = 0;
-    while (i < lines.length) {
-      if (indentOf(lines[i]) !== baseIndent) {
-        i += 1;
-        continue;
-      }
-      const { block, end } = childBlock(lines, i, baseIndent);
-      // Replace the leading dash with a space so the item content aligns as its own block.
-      const head = lines[i].replace(/^(\s*)-(\s)/, '$1 $2').replace(/^(\s*)-$/, '$1 ');
-      const itemLines = [head, ...block];
-      const trimmedHead = head.trim();
-      items.push(trimmedHead === '' && block.length === 0 ? null : parseLines(itemLines));
-      i = end;
-    }
-    return items;
-  }
-
-  // A block with no `key:` line at the base indent is a single scalar (e.g. a block list item).
-  const hasKey = lines.some((line) => indentOf(line) === baseIndent && /:(\s|$)/.test(line.trim()));
-  if (!hasKey) return parseScalar(firstAtBase.trim());
-
-  const map = {};
-  let i = 0;
-  while (i < lines.length) {
-    if (indentOf(lines[i]) !== baseIndent) {
-      i += 1;
-      continue;
-    }
-    const line = lines[i].trim();
-    const colon = line.indexOf(':');
-    if (colon === -1) {
-      i += 1;
-      continue;
-    }
-    const key = line.slice(0, colon).trim();
-    const inline = line.slice(colon + 1).trim();
-    if (inline !== '') {
-      map[key] = parseScalar(inline);
-      i += 1;
-    } else {
-      const { block, end } = childBlock(lines, i, baseIndent);
-      map[key] = block.length ? parseLines(block) : null;
-      i = end;
-    }
-  }
-  return map;
-}
-
-function parseDocument(text) {
-  const cleaned = text
-    .split('\n')
-    .filter((line) => line.trim() !== '' && !/^\s*#/.test(line));
-  const docs = [];
-  let current = [];
-  for (const line of cleaned) {
-    if (/^---\s*$/.test(line)) {
-      if (current.length) docs.push(current);
-      current = [];
-      continue;
-    }
-    current.push(line);
-  }
-  if (current.length) docs.push(current);
-
-  const cases = [];
-  for (const doc of docs) {
-    const value = parseLines(doc);
-    if (Array.isArray(value)) cases.push(...value.filter((v) => v && typeof v === 'object'));
-    else if (value && typeof value === 'object') cases.push(value);
-  }
-  return cases;
-}
-
-function loadCases(file) {
-  const text = fs.readFileSync(file, 'utf8');
-  if (file.endsWith('.json')) {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [parsed];
-  }
-  return parseDocument(text);
-}
-
-// --- Validation -----------------------------------------------------------
 function isNonEmptyArray(value) {
   return Array.isArray(value) && value.length > 0;
 }
@@ -278,32 +114,14 @@ function validateCase(testCase) {
   return { errors, warnings };
 }
 
-// --- File collection ------------------------------------------------------
-const VALID_EXT = /\.(ya?ml|json)$/i;
-const ignored = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
-
-function collect(target) {
-  const resolved = path.resolve(target);
-  if (!fs.existsSync(resolved)) {
-    console.error(`Path not found: ${resolved}`);
-    process.exit(2);
-  }
-  const stat = fs.statSync(resolved);
-  if (stat.isFile()) return [resolved];
-  const out = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (ignored.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (VALID_EXT.test(entry.name)) out.push(full);
-    }
-  };
-  walk(resolved);
-  return out;
+let files;
+try {
+  files = collectCaseFiles(inputArgs);
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
 }
 
-const files = [...new Set(inputArgs.flatMap(collect))];
 const fileReports = [];
 const allErrors = [];
 const allWarnings = [];

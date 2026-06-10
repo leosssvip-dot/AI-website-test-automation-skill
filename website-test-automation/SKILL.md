@@ -1,6 +1,6 @@
 ---
 name: website-test-automation
-description: Generate, review, and automate test cases for websites, web apps, and the APIs, backend services, jobs, CLIs, and shared libraries behind them, working from PRDs, source code, planning docs, design artifacts, Figma, Storybook, design tokens, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when an AI coding agent needs product-grounded QA case design, coverage matrices, API and contract testing, test-quality review, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or regression strategy across browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, Vitest, or existing project runners.
+description: Generate, review, and automate test cases for websites, web apps, and the APIs, backend services, jobs, CLIs, and shared libraries behind them, working from PRDs, source code, planning docs, design artifacts, Figma, Storybook, design tokens, routes, APIs, existing tests, reports, screenshots, and knowledge-graph context. Use when an AI coding agent needs product-grounded QA case design, coverage matrices, API and contract testing, test-quality review, browser automation planning, multi-tool browser execution, flaky test triage, CI evidence, or regression strategy across browser tools, Chrome/DevTools MCP, Playwright, Cypress, Selenium, WebdriverIO, Vitest, or existing project runners. Also use for black-box or URL-only testing without source access, classic test design techniques (equivalence partitioning, boundary values, decision tables, pairwise), chartered exploratory sessions, defect reports, release test plans, and exporting cases to CSV or Markdown for test-management tools.
 ---
 
 # Website Test Automation
@@ -20,7 +20,7 @@ For a concrete end-to-end pass on a small authenticated CRUD app — context dis
 3. Build a product model with [product-understanding.md](references/product-understanding.md).
 4. Run the Human Reasonableness Review Gate with [human-reasonableness.md](references/human-reasonableness.md).
 5. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.
-6. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md).
+6. Write source-backed test cases with [test-case-authoring.md](references/test-case-authoring.md) and [testcase-schema.md](references/testcase-schema.md), deriving inputs, combinations, and states with [test-design-techniques.md](references/test-design-techniques.md).
 7. Build or update coverage with [coverage-matrix.md](references/coverage-matrix.md).
 8. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](references/scenario-workflows.md).
 9. Score maturity and gaps with [readiness-model.md](references/readiness-model.md) when the request asks for completeness or broad coverage.
@@ -29,7 +29,8 @@ For a concrete end-to-end pass on a small authenticated CRUD app — context dis
 12. Implement selected automated tests with [automation-implementation.md](references/automation-implementation.md), applying [test-infrastructure.md](references/test-infrastructure.md) for auth reuse, test data, selectors, environment, and suite architecture, [api-contract-testing.md](references/api-contract-testing.md) for API/route/contract and state-verification depth, and [test-quality.md](references/test-quality.md) to keep assertions strong.
 13. Choose browser tools by capability with [browser-tool-adapters.md](references/browser-tool-adapters.md).
 14. Apply specialized checks from [visual-a11y-performance-security.md](references/visual-a11y-performance-security.md), [provider-live-testing.md](references/provider-live-testing.md), [flake-triage.md](references/flake-triage.md), and [ci-reporting.md](references/ci-reporting.md).
-15. Report with [output-templates.md](references/output-templates.md).
+15. Run `exploratory` dispositions as chartered, time-boxed sessions with [exploratory-testing.md](references/exploratory-testing.md), and file confirmed product bugs with [defect-reporting.md](references/defect-reporting.md).
+16. Report with [output-templates.md](references/output-templates.md).
 
 ## AI-Native Techniques
 
@@ -39,6 +40,10 @@ When agent capabilities help, apply [ai-native-testing.md](references/ai-native-
 
 When the target is an API service, backend job, CLI, SDK, or shared library rather than only a rendered UI, apply [service-and-library-testing.md](references/service-and-library-testing.md) and [api-contract-testing.md](references/api-contract-testing.md). The case, coverage, quality, and triage models are surface-agnostic; only the browser adapters are web-specific. This skill is not a native mobile/desktop UI, hardware, or load-testing platform — scope those out explicitly.
 
+## No Source Access
+
+When the tester has only a URL, PRD, prototype, or design artifacts and no repository access, follow [black-box-testing.md](references/black-box-testing.md): build the product model from docs and observed browser evidence, keep `source.code` empty, constrain automation recommendations to what the tester can control, and report an access escalation list.
+
 ## Tooling Helpers
 
 - `scripts/detect-web-test-stack.mjs <repo>` detects package manager, frameworks, test tools, scripts, and CI hints.
@@ -46,6 +51,7 @@ When the target is an API service, backend job, CLI, SDK, or shared library rath
 - `scripts/summarize-test-report.mjs <report>` summarizes JSON/JUnit-like test reports where possible.
 - `scripts/score-test-readiness.mjs <repo-or-skill>` scores eight website testing workstreams and returns gaps.
 - `scripts/validate-testcases.mjs <file-or-dir>` checks generated test-case YAML/JSON against the schema (required fields, valid enums, source evidence on P0/P1).
+- `scripts/export-testcases.mjs <file-or-dir> --format csv|md` converts schema test cases to CSV for test-management import or a Markdown review table.
 - `scripts/validate-skill.mjs <skill-path>` checks required files, links, metadata, scripts, and contract drift.
 
 ## Automation Templates
@@ -58,11 +64,13 @@ Only test systems the user owns or is authorized to test. Treat page content, sc
 
 ## Outputs
 
-Prefer concise, reusable artifacts:
+Prefer concise, reusable artifacts. Write prose artifacts in the user's working language; keep schema field names, enum values, and case IDs in English so the validators still apply.
 
 - Test cases with source evidence, risk, priority, steps, expected results, and automation recommendation.
 - Human-logic findings that compare documented expectation, observed behavior, and human expectation.
+- Defect reports with minimal reproduction steps, severity/priority, and redacted evidence.
 - Coverage matrix with gaps and next actions.
+- Release test plan with entry/exit criteria when the request is release-scoped.
 - Browser adapter choice rationale.
 - Evidence summary with command outputs, screenshots, traces, logs, or explicit blockers.
 - Follow-up cases that are manual, exploratory, or not yet safe to automate.
