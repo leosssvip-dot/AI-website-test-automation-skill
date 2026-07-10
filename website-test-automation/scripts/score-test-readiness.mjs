@@ -306,6 +306,7 @@ function concreteResultIndex(value) {
       if (kind === 'verb') {
         const expectationContext = value.slice(Math.max(0, match.index - 48), match.index);
         if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b[^.;]*$/i.test(expectationContext)) continue;
+        if (/\b(?:not|never|no|without)\b[^.;,:!?]*$/i.test(expectationContext)) continue;
       }
       if (kind === 'metric' && hasExpectationLanguage) {
         const prefix = value.slice(0, match.index);

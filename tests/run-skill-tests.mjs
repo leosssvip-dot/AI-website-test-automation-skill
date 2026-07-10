@@ -732,7 +732,7 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
     path.join(evidenceDir, 'pending-orders-evidence.md'),
     'planned 12; 12 passed; TODO follow-up\n',
   );
-  fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta critical flow passed 9 deterministic assertions.\n');
+  fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta critical flow failed 1 assertion with captured diagnostics.\n');
   fs.writeFileSync(
     path.join(evidenceDir, 'evidence-manifest.json'),
     JSON.stringify({
@@ -744,7 +744,10 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
           command: 'npm test -- pending-orders',
           outcome: 'expected 201; actual status 200; TODO follow-up',
         },
-        readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+        {
+          ...readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+          outcome: 'project-beta critical flow failed with captured diagnostics',
+        },
       ],
     }),
   );
@@ -822,6 +825,8 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       ['postfixed planned count', '12 tests planned'],
       ['postfixed should status', 'Status 200 should be returned'],
       ['bare actual does not rescue expected status', 'HTTP status 200 expected; actual unknown'],
+      ['negated verified outcome', 'not verified yet'],
+      ['negated completed outcome', 'never completed successfully'],
     ].map(([name, outcome]) => ({
       name,
       setup: ({ projects, writeManifest }) => writeManifest({
@@ -833,6 +838,13 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       name: 'weak evidence without concrete proof',
       setup: ({ projects, evidenceDir, writeManifest }) => {
         fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'looks good\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'negated evidence result',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'critical flow was not verified yet\n');
         writeManifest({ version: 1, projects });
       },
     },
