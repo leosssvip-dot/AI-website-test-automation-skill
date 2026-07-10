@@ -317,9 +317,9 @@ for (const file of routeFiles) {
     add('static-html-route', '/' + raw, file, 'medium');
   }
 
-  const appPageMatch = projectRel.match(/^(?:src\/)?app\/(.*?)\/?page\.(tsx?|jsx?)$/);
+  const appPageMatch = projectRel.match(/^(?:src\/)?app\/(?:(.*)\/)?page\.(tsx?|jsx?)$/);
   if (appPageMatch) {
-    add('next-app-route', toRoutePath(appPageMatch[1]), file, 'high');
+    add('next-app-route', toRoutePath(appPageMatch[1] || ''), file, 'high');
   }
 
   const appApiMatch = projectRel.match(/^(?:src\/)?app\/api(?:\/(.*))?\/route\.(tsx?|jsx?)$/);

@@ -1733,6 +1733,7 @@ test('route-inventory anchors framework routes to safe package roots', () => {
   const files = [
     ['apps/app/package.json', '{}'],
     ['apps/app/app/page.tsx', 'export default function Home() { return null; }'],
+    ['apps/app/app/foopage.tsx', 'export default function NotAPage() { return null; }'],
     ['apps/app/src/app/dashboard/page.tsx', 'export default function Dashboard() { return null; }'],
     ['packages/pages/package.json', '{}'],
     ['packages/pages/src/pages/about.tsx', 'export default function About() { return null; }'],
@@ -1753,6 +1754,7 @@ test('route-inventory anchors framework routes to safe package roots', () => {
   const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
   const byFile = new Map(result.routes.map((route) => [route.file, route]));
   assert.equal(byFile.get('apps/app/app/page.tsx')?.route, '/');
+  assert.equal(byFile.has('apps/app/app/foopage.tsx'), false);
   assert.equal(byFile.get('apps/app/src/app/dashboard/page.tsx')?.route, '/dashboard');
   assert.equal(byFile.get('packages/pages/src/pages/about.tsx')?.route, '/about');
   assert.equal(byFile.get('packages/pages/src/pages/store.vue')?.route, '/store');
