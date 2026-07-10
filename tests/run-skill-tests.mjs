@@ -827,6 +827,8 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       ['bare actual does not rescue expected status', 'HTTP status 200 expected; actual unknown'],
       ['negated verified outcome', 'not verified yet'],
       ['negated completed outcome', 'never completed successfully'],
+      ['future verified outcome', 'yet to be verified'],
+      ['long-clause negated outcome', `not ${'remotely '.repeat(8)}verified`],
     ].map(([name, outcome]) => ({
       name,
       setup: ({ projects, writeManifest }) => writeManifest({
@@ -845,6 +847,13 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       name: 'negated evidence result',
       setup: ({ projects, evidenceDir, writeManifest }) => {
         fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'critical flow was not verified yet\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'future evidence result',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'critical flow is yet to be verified\n');
         writeManifest({ version: 1, projects });
       },
     },

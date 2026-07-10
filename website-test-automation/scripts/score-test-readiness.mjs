@@ -304,9 +304,20 @@ function concreteResultIndex(value) {
     for (const match of value.matchAll(pattern)) {
       if (requiresContext && substantiveTokenCount < 3) continue;
       if (kind === 'verb') {
-        const expectationContext = value.slice(Math.max(0, match.index - 48), match.index);
-        if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b[^.;]*$/i.test(expectationContext)) continue;
-        if (/\b(?:not|never|no|without)\b[^.;,:!?]*$/i.test(expectationContext)) continue;
+        const beforeMatch = value.slice(0, match.index);
+        const clauseBoundary = Math.max(
+          beforeMatch.lastIndexOf('.'),
+          beforeMatch.lastIndexOf(';'),
+          beforeMatch.lastIndexOf(','),
+          beforeMatch.lastIndexOf(':'),
+          beforeMatch.lastIndexOf('!'),
+          beforeMatch.lastIndexOf('?'),
+          beforeMatch.lastIndexOf('\n'),
+        );
+        const clausePrefix = beforeMatch.slice(clauseBoundary + 1);
+        if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b/i.test(clausePrefix)) continue;
+        if (/\bnot\b(?!\s+only\b)|\b(?:never|no|without)\b/i.test(clausePrefix)) continue;
+        if (/\b(?:yet|still|remain(?:s|ed)?|need(?:s|ed)?)\s+to\s+be\b|\bto\s+be\s*$/i.test(clausePrefix)) continue;
       }
       if (kind === 'metric' && hasExpectationLanguage) {
         const prefix = value.slice(0, match.index);
