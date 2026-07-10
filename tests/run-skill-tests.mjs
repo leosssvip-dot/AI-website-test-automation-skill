@@ -774,6 +774,30 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       }),
     },
     {
+      name: 'wrapped placeholder outcome',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], outcome: 'Status: pending' }, projects[1]],
+      }),
+    },
+    ...['id', 'target', 'command'].map((field) => ({
+      name: `placeholder ${field} with concrete-result bait`,
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [
+          { ...projects[0], [field]: `TODO ${field} value 12 tests passed` },
+          projects[1],
+        ],
+      }),
+    })),
+    {
+      name: 'wrapped placeholder evidence',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), '# Evidence\n\nTODO: replace later\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
       name: 'single project',
       setup: ({ projects, writeManifest }) => writeManifest({ version: 1, projects: [projects[0]] }),
     },
@@ -782,6 +806,16 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       setup: ({ projects, writeManifest }) => writeManifest({
         version: 1,
         projects: [projects[0], { ...projects[1], id: projects[0].id }],
+      }),
+    },
+    {
+      name: 'duplicate normalized project targets',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [
+          projects[0],
+          { ...projects[1], target: `  ${projects[0].target.toUpperCase()}  ` },
+        ],
       }),
     },
     {
@@ -931,6 +965,63 @@ test('readiness scorer keeps multi-manifest audit fields attributable', () => {
   );
 });
 
+test('readiness scorer enforces the 2 MiB text boundary', () => {
+  const maxTextFileBytes = 2 * 1024 * 1024;
+  const oversizedPayload = 'x'.repeat(maxTextFileBytes + 1);
+
+  const oversizedManifestFixture = copiedReadinessFixture('readiness-oversized-manifest-');
+  const oversizedManifestDir = path.join(oversizedManifestFixture, 'real-project-validation');
+  fs.mkdirSync(oversizedManifestDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(oversizedManifestDir, 'evidence-manifest.json'),
+    JSON.stringify({ version: 1, projects: [], padding: oversizedPayload }),
+  );
+  const oversizedManifestResult = runJson(
+    'node',
+    ['website-test-automation/scripts/score-test-readiness.mjs', oversizedManifestFixture],
+  );
+  assert.equal(oversizedManifestResult.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(oversizedManifestResult.overallScore <= 89, true);
+  assert.equal(oversizedManifestResult.evidenceCalibration.reasons.some((reason) => /exceeds.*2097152/i.test(reason)), true);
+
+  const oversizedEvidenceFixture = copiedReadinessFixture('readiness-oversized-evidence-');
+  const oversizedEvidenceDir = path.join(oversizedEvidenceFixture, 'real-project-validation');
+  fs.mkdirSync(oversizedEvidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(oversizedEvidenceDir, 'project-alpha.md'), oversizedPayload);
+  fs.writeFileSync(path.join(oversizedEvidenceDir, 'project-beta.md'), 'Project beta passed 9 assertions.\n');
+  fs.writeFileSync(
+    path.join(oversizedEvidenceDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [
+        readinessProject('project-alpha', 'real-project-validation/project-alpha.md'),
+        readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+      ],
+    }),
+  );
+  const oversizedEvidenceResult = runJson(
+    'node',
+    ['website-test-automation/scripts/score-test-readiness.mjs', oversizedEvidenceFixture],
+  );
+  assert.equal(oversizedEvidenceResult.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(oversizedEvidenceResult.overallScore <= 89, true);
+  assert.equal(oversizedEvidenceResult.evidenceCalibration.reasons.some((reason) => /exceeds.*2097152/i.test(reason)), true);
+
+  const oversizedTextFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-oversized-text-'));
+  fs.writeFileSync(
+    path.join(oversizedTextFixture, 'product-understanding.md'),
+    `${oversizedPayload}\nPersonas and workflows cover entities, states, and permissions.\n`,
+  );
+  const oversizedTextResult = runJson(
+    'node',
+    ['website-test-automation/scripts/score-test-readiness.mjs', oversizedTextFixture],
+  );
+  const productUnderstanding = oversizedTextResult.dimensions.find(
+    (dimension) => dimension.key === 'product-understanding',
+  );
+  assert.equal(productUnderstanding.score, 0);
+});
+
 test('readiness scorer ignores external keyword text reached through a normal text symlink', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-external-text-symlink-'));
   const caseStudies = path.join(fixture, 'case-studies');
@@ -977,6 +1068,10 @@ test('readiness model documents the structured 90+ evidence gate and conditional
   const model = read('website-test-automation/references/readiness-model.md');
   assert.match(model, /evidence-manifest\.json/);
   assert.match(model, /at least two|minimum of two/i);
+  assert.match(model, /unique project IDs[^\n]*unique project targets/i);
+  assert.match(model, /Status:[^\n]*12 tests passed|12 tests passed[^\n]*TODO follow-up/i);
+  assert.match(model, /outcome or evidence report/i);
+  assert.match(model, /2 MiB/);
   assert.match(model, /ordinary non-symlink/i);
   assert.match(model, /Browser Evidence Condition/);
   assert.match(model, /candidate[^\n]*not[^\n]*runtime quality guarantee/i);

@@ -93,8 +93,9 @@ function walk(dir) {
 walk(rootRealPath);
 
 const rel = (file) => path.relative(rootRealPath, file).replaceAll(path.sep, '/');
-const relFiles = files.map(rel);
-const textFiles = files.filter((file) => /\.(md|ya?ml|json|mjs|js|ts|tsx|jsx|html)$/.test(file));
+const scorableFiles = files.filter((file) => inspectContainedRegularFile(file).ok);
+const relFiles = scorableFiles.map(rel);
+const textFiles = scorableFiles.filter((file) => /\.(md|ya?ml|json|mjs|js|ts|tsx|jsx|html)$/.test(file));
 const allText = textFiles.map((file) => {
   const inspection = inspectContainedRegularFile(file);
   if (!inspection.ok) return '';
@@ -200,24 +201,24 @@ const dimensions = [
   ]),
 ];
 
-function startsAsPlaceholder(value) {
-  return /^(?:todo|tbd|pending|placeholder|not[\s_-]+run|example[\s_-]*only|replace(?:[\s_-]+(?:me|this|later))?)\b/i.test(value);
+function hasPlaceholderMarker(value) {
+  return /\b(?:todo|tbd|pending|placeholder)\b|\bnot[\s_-]+run\b|\bexample[\s_-]*only\b|\breplace(?:[\s_-]+(?:me|this|later))?\b/i.test(value);
 }
 
 function hasConcreteResult(value) {
-  return /\b(?:passed|failed|verified|observed|completed)\b|\b\d+\s+(?:tests?|checks?|assertions?|passes?|failures?)\b|\b(?:status|exit)(?:\s+code)?\s*[:=]?\s*\d+\b/i.test(value);
+  return /\b\d+\s+(?:tests?|checks?|assertions?|cases?)\s+(?:passed|failed|completed)\b|\b(?:passed|failed|completed|verified)\s+\d+(?:\s+\w+){0,3}\s+(?:tests?|checks?|assertions?|cases?)\b|\b\d+\s+(?:passes?|failures?)\b|\b(?:http|status|exit)(?:\s+code)?\s*[:=]?\s*\d+\b/i.test(value);
 }
 
-function isPlaceholderValue(value) {
+function isPlaceholderValue(value, allowConcreteResult = false) {
   if (typeof value !== 'string' || value.trim() === '') return true;
   const normalized = value.trim();
-  return startsAsPlaceholder(normalized) && !hasConcreteResult(normalized);
+  return hasPlaceholderMarker(normalized) && !(allowConcreteResult && hasConcreteResult(normalized));
 }
 
 function isPlaceholderOnlyEvidence(contents) {
   if (typeof contents !== 'string' || contents.trim() === '') return true;
   const normalized = contents.trim().replace(/^#+\s*/, '');
-  return startsAsPlaceholder(normalized) && !hasConcreteResult(normalized);
+  return hasPlaceholderMarker(normalized) && !hasConcreteResult(normalized);
 }
 
 function isEvidenceManifest(relativeFile) {
@@ -281,6 +282,7 @@ function validateEvidenceManifest(manifestFile) {
   if (manifest.projects.length < 2) reasons.push('manifest must contain at least two projects');
 
   const validIds = [];
+  const validTargets = [];
   let validProjectCount = 0;
   for (const [index, project] of manifest.projects.entries()) {
     const projectLabel = `projects[${index}]`;
@@ -289,7 +291,7 @@ function validateEvidenceManifest(manifestFile) {
       projectReasons.push(`${projectLabel} must be an object`);
     } else {
       for (const field of ['id', 'target', 'command', 'outcome']) {
-        if (isPlaceholderValue(project[field])) {
+        if (isPlaceholderValue(project[field], field === 'outcome')) {
           projectReasons.push(`${projectLabel}.${field} must be a non-placeholder string`);
         }
       }
@@ -306,6 +308,7 @@ function validateEvidenceManifest(manifestFile) {
     if (projectReasons.length === 0) {
       validProjectCount += 1;
       validIds.push(project.id.trim().toLowerCase());
+      validTargets.push(project.target.trim().toLowerCase());
     } else {
       reasons.push(...projectReasons);
     }
@@ -314,6 +317,9 @@ function validateEvidenceManifest(manifestFile) {
   const uniqueIds = new Set(validIds);
   if (uniqueIds.size < 2) reasons.push('manifest must contain at least two unique valid project IDs');
   if (uniqueIds.size !== validIds.length) reasons.push('manifest project IDs must not be duplicated');
+  const uniqueTargets = new Set(validTargets);
+  if (uniqueTargets.size < 2) reasons.push('manifest must contain at least two unique valid project targets');
+  if (uniqueTargets.size !== validTargets.length) reasons.push('manifest project targets must not be duplicated');
   if (validProjectCount < 2) reasons.push('manifest must contain at least two fully valid projects');
 
   return {
