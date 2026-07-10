@@ -1,10 +1,13 @@
-const assert = require('node:assert/strict');
-const { Builder, By, until } = require('selenium-webdriver');
+import assert from 'node:assert/strict';
+
+const baseUrl = process.env.TEST_BASE_URL;
+if (!baseUrl) throw new Error('TEST_BASE_URL is required for Selenium tests');
 
 async function run() {
+  const { Builder, By, until } = await import('selenium-webdriver');
   const driver = await new Builder().forBrowser('chrome').build();
   try {
-    await driver.get(process.env.TEST_BASE_URL || 'http://localhost:3000/replace-with-route');
+    await driver.get(new URL('/replace-with-route', baseUrl).href);
     await driver.findElement(By.css('[name="replace-with-field"]')).sendKeys('replace-with-value');
     await driver.findElement(By.css('[data-testid="replace-with-action"]')).click();
     await driver.wait(until.urlMatches(/replace-with-expected-route/), 5000);

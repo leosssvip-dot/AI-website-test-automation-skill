@@ -11,7 +11,7 @@ Test cases first. Tool agnostic. Understand the product and code before choosing
 
 ## Worked Example
 
-For a concrete end-to-end pass on a small authenticated CRUD app — context discovery through implemented test and evidence, including how to surface PRD-vs-code mismatches — see [worked-example.md](references/worked-example.md).
+For a concrete planning pass on a small authenticated CRUD app — from context discovery through case disposition, including when PRD-vs-code mismatches make automation unsafe — see [worked-example.md](references/worked-example.md).
 
 ## Workflow
 

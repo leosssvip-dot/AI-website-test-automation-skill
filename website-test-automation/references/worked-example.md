@@ -1,6 +1,6 @@
 # Worked Example: Authenticated CRUD App
 
-This is a full end-to-end walkthrough of the skill on one small app, so the workflow is concrete rather than abstract. It uses the bundled fixture at `tests/fixtures/auth-crud` (a deliberately incomplete Next.js project) to show every stage: context discovery, product model, human-reasonableness review, mismatch detection, coverage matrix, source-backed cases, disposition, automation, and evidence. The point of this fixture is that its PRD and its code disagree — a realistic situation the skill must surface instead of hide.
+This is a repository-source planning walkthrough on one small app, so the workflow is concrete rather than abstract. The fixture exists only in this skill's source repository at `tests/fixtures/auth-crud`; it is not included in the installed skill package. It is a deliberately incomplete Next.js project used to show context discovery, product modeling, human-reasonableness review, mismatch detection, coverage, source-backed cases, and disposition. Its PRD and code disagree — a realistic situation the skill must surface instead of hide. No test landed and no command was run as evidence for this narrative.
 
 Use this as a template for shape and rigor, not as cases to copy. Re-derive everything from the target repo's own sources.
 
@@ -14,17 +14,14 @@ Use this as a template for shape and rigor, not as cases to copy. Re-derive ever
 
 ## Step 1 — Discover Context
 
-Run the helper scripts before reading every file by hand:
+When working in the source repository, run the helper scripts before reading every file by hand:
 
 ```bash
 node website-test-automation/scripts/detect-web-test-stack.mjs tests/fixtures/auth-crud
-# frameworks: nextjs, react | testFrameworks: playwright, vitest | scripts: test=vitest, test:e2e=playwright test
-
 node website-test-automation/scripts/route-inventory.mjs tests/fixtures/auth-crud
-# /login, /projects, /projects/new, GET|POST /api/projects
 ```
 
-Conclusion: existing stack is Vitest (unit/route) + Playwright (e2e). Prefer both for durable regression; do not introduce a new runner.
+Static inspection of `package.json` indicates Vitest (unit/route) + Playwright (e2e). Verify the actual command output before relying on it, prefer the existing runners for durable regression, and do not introduce a new runner.
 
 ## Step 2 — Product Model
 
@@ -76,26 +73,26 @@ The PRD and the code disagree. Do not flatten these into assumptions; carry them
 | Product area | Workflow | Risk | Source evidence | Source status | Layer | Priority | Current coverage | Gap / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | auth/session | guard `/projects` | unauthorized access | PRD; `projects/page.tsx` | mismatch | route/middleware | P0 | none | Decide guard; add route test once behavior is set |
-| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired, failing) | Add API contract + uniqueness test |
+| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired, failing) | Decide persistence/uniqueness, implement, then add API tests |
 | projects | edit / archive | missing capability | PRD | documented | api/e2e | P1 | none | Build feature, then cover |
 
 ## Step 6 — Source-Backed Cases
 
-Two representative cases (schema-complete; would pass `validate-testcases.mjs`). One is a clean contract test; one carries a mismatch and is not safe to make durable regression yet.
+Two representative cases (schema-complete; intended for `validate-testcases.mjs`). Both carry unresolved mismatches and are not safe to turn into passing durable regressions yet.
 
 ```yaml
 - id: TC-PROJ-001
-  title: Create-project API returns 201 with the submitted name
+  title: Created project is persisted and retrievable
   source:
     docs: ["docs/PRD.md"]
     code: ["src/app/api/projects/route.ts"]
     observed: []
-  source_status: inferred
-  mismatch: ""
+  source_status: mismatch
+  mismatch: "The PRD requires persisted, account-scoped, unique projects, but POST only echoes a name and GET returns static data."
   human_expectation: "A created project is persisted and retrievable, not just echoed back."
-  why_unreasonable: ""
-  logic_risk: false
-  suggested_product_fix: ""
+  why_unreasonable: "Returning 201 for data that cannot be read back presents an incomplete write as successful."
+  logic_risk: true
+  suggested_product_fix: "Define and implement persistence, account scoping, required-name validation, and uniqueness before marking the contract green."
   type: api
   priority: P0
   risk: data-integrity
@@ -104,23 +101,24 @@ Two representative cases (schema-complete; would pass `validate-testcases.mjs`).
     - Authenticated session (once auth exists)
   steps:
     - POST /api/projects with a JSON body containing a name
+    - GET /api/projects for the same account
   expected:
     - Response status is 201
-    - Response body echoes the submitted name
+    - The created project is returned by the subsequent list request
+    - A duplicate name for the same account is rejected
   negative_cases:
     - Missing name should be rejected once validation exists
   data_needs:
     - A unique project name per run
   automation:
-    recommended: true
-    target: api-or-component
+    recommended: false
+    target: not-automated-risk-note
     preferred_tools: ["vitest"]
   evidence:
     required:
       - Route handler source
-      - Command output from the route test
-  assumptions:
-    - Current handler does not persist; test asserts contract shape only
+      - Product decision for persistence and uniqueness
+  assumptions: []
   unknowns:
     - Whether persistence and uniqueness land in this milestone
 - id: TC-AUTH-002
@@ -132,8 +130,8 @@ Two representative cases (schema-complete; would pass `validate-testcases.mjs`).
   source_status: mismatch
   mismatch: "PRD requires login before /projects, but the page renders with no auth guard."
   human_expectation: "Protected data should not render to a logged-out visitor."
-  why_unreasonable: ""
-  logic_risk: false
+  why_unreasonable: "Rendering a protected page without checking the session violates the documented access boundary."
+  logic_risk: true
   suggested_product_fix: "Add a route guard/middleware that redirects unauthenticated users to /login."
   type: e2e
   priority: P0
@@ -158,38 +156,43 @@ Two representative cases (schema-complete; would pass `validate-testcases.mjs`).
     - Whether the guard is intended this milestone or pages are pre-auth stubs
 ```
 
-Note: `TC-AUTH-002` is a `mismatch` with `automation.recommended: false`. Do not write a durable test that asserts the buggy current behavior; surface the decision first.
+Both cases are `mismatch` records with `automation.recommended: false`. Do not write durable tests that bless the incomplete current behavior; surface and resolve the product decisions first.
 
 ## Step 7 — Disposition Gate
 
 | Case ID | Disposition | Layer | Why now / why not now | Next action |
 | --- | --- | --- | --- | --- |
-| TC-PROJ-001 | automate-now | api | Handler exists; contract is testable today | Add a Vitest route test |
+| TC-PROJ-001 | automate-later | api | The handler reports creation without persistence or uniqueness | Decide and implement the write/read contract, then add the route test |
 | TC-AUTH-002 | human-logic-risk | route | Behavior contradicts the PRD; automating now would lock in a bug | Get a product decision, then cover |
 | edit / archive | risk-note/not-in-scope | — | Feature does not exist yet | Track as gap until built |
 
-## Step 8 — Automation + Implementation
+## Step 8 — Proposed Automation After the Product Decision
 
-`automate-now` → one Vitest route test on the real handler. Keep it deterministic and scoped:
+Do not land or mark this test green against the current fixture. After the persistence and uniqueness contract is decided and implemented, a route test under `tests/api` should import the real handlers and verify state, not merely echo shape:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { POST } from "../src/app/api/projects/route";
+import { GET, POST } from "../../src/app/api/projects/route";
 
 describe("POST /api/projects (TC-PROJ-001)", () => {
-  it("returns 201 and echoes the submitted name", async () => {
+  it("persists the created project for subsequent reads", async () => {
+    const name = `Roadmap-${Date.now()}`;
     const req = new Request("http://test/api/projects", {
       method: "POST",
-      body: JSON.stringify({ name: `Roadmap-${Date.now()}` }),
+      body: JSON.stringify({ name }),
     });
     const res = await POST(req);
     expect(res.status).toBe(201);
-    expect((await res.json()).name).toMatch(/^Roadmap-/);
+
+    const list = await GET();
+    expect(await list.json()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name })]),
+    );
   });
 });
 ```
 
-Command: `npx vitest run tests/api/projects-route.test.ts`.
+After the product change lands, run `npx vitest run tests/api/projects-route.test.ts` and capture the actual result. This walkthrough records neither an execution result nor a passing test.
 
 ## Step 9 — Triage the Existing Test
 
@@ -197,4 +200,4 @@ Command: `npx vitest run tests/api/projects-route.test.ts`.
 
 ## Output the Agent Should Produce
 
-Product model with source status, the logic-findings ledger, the mismatch table with decisions needed, the coverage matrix, source-backed cases, the disposition table, the landed route test plus its command/result, and the existing-test triage — using [output-templates.md](output-templates.md). The headline is not "tests written"; it is "three PRD-vs-code mismatches surfaced, one contract test landed, three decisions needed."
+Product model with source status, the logic-findings ledger, the mismatch table with decisions needed, the coverage matrix, source-backed cases, the disposition table, proposed automation, and the existing-test triage — using [output-templates.md](output-templates.md). The headline is: "three PRD-vs-code mismatches surfaced, zero automated tests added, three decisions needed."

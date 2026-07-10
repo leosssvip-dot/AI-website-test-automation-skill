@@ -2,23 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-function ReplaceWithComponent({ onSubmit }: { onSubmit: (value: string) => void }) {
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        onSubmit(String(form.get('name') || ''));
-      }}
-    >
-      <label>
-        Name
-        <input name="name" />
-      </label>
-      <button type="submit">Save</button>
-    </form>
-  );
-}
+// Replace this path and symbol with the target project's real component; do not recreate it here.
+import { ReplaceWithComponent } from '@/components/ReplaceWithComponent';
 
 describe('TC-COMPONENT-001 component behavior', () => {
   it('submits the documented value', async () => {

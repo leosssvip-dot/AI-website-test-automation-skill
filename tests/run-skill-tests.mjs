@@ -349,6 +349,70 @@ test('skill references and templates cover automation implementation', () => {
   assert.match(schema, /mismatch/);
 });
 
+test('starter automation templates exercise imported target code', () => {
+  const routeTemplate = read('website-test-automation/assets/automation-templates/vitest-route.test.ts');
+  assert.match(routeTemplate, /^import\s*\{\s*POST\s*\}\s*from\s*['"][^'"]+['"]/m);
+  assert.match(routeTemplate, /await\s+POST\s*\(\s*request\s*\)/);
+  assert.doesNotMatch(routeTemplate, /\bvi\.fn\s*\(/);
+
+  const componentTemplate = read(
+    'website-test-automation/assets/automation-templates/testing-library.test.tsx',
+  );
+  assert.match(componentTemplate, /^import\s*\{\s*ReplaceWithComponent\s*\}\s*from\s*['"][^'"]+['"]/m);
+  assert.match(componentTemplate, /render\s*\(\s*<ReplaceWithComponent\b/);
+  assert.doesNotMatch(
+    componentTemplate,
+    /(?:function|class)\s+ReplaceWithComponent\b|(?:const|let|var)\s+ReplaceWithComponent\s*=/,
+  );
+});
+
+test('Selenium starter requires an explicit test environment URL', () => {
+  const relativePath = 'website-test-automation/assets/automation-templates/selenium.test.js';
+  const seleniumTemplate = read(relativePath);
+  assert.match(seleniumTemplate, /process\.env\.TEST_BASE_URL/);
+  assert.match(seleniumTemplate, /throw\s+new\s+Error\s*\(\s*['"]TEST_BASE_URL\b/);
+  assert.doesNotMatch(seleniumTemplate, /process\.env\.TEST_BASE_URL\s*(?:\|\||\?\?)/);
+  assert.doesNotMatch(seleniumTemplate, /localhost|127\.0\.0\.1/i);
+
+  const result = runRaw(process.execPath, [path.join(repoRoot, relativePath)], { env: {} });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /TEST_BASE_URL is required for Selenium tests/);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /require is not defined|ERR_MODULE_NOT_FOUND/);
+});
+
+test('worked example is an honest source-repository planning walkthrough', () => {
+  const skill = read('website-test-automation/SKILL.md');
+  const workedExample = read('website-test-automation/references/worked-example.md');
+
+  assert.doesNotMatch(skill, /implemented test and evidence/i);
+  assert.match(workedExample, /fixture exists only in this skill's source repository/i);
+  assert.match(workedExample, /not included in the installed skill package/i);
+  assert.match(workedExample, /no (?:test|command)[^.\n]*(?:landed|run)/i);
+  for (const unsupportedClaim of [
+    /bundled fixture/i,
+    /clean contract test/i,
+    /landed route test/i,
+    /one contract test landed/i,
+    /its command\/result/i,
+  ]) {
+    assert.doesNotMatch(workedExample, unsupportedClaim);
+  }
+
+  const projectCase = workedExample.split('- id: TC-PROJ-001')[1]?.split('- id: TC-AUTH-002')[0] || '';
+  assert.match(projectCase, /source_status:\s*mismatch/);
+  assert.match(projectCase, /mismatch:\s*"[^"]*(?:persist|unique)[^"]*"/i);
+  assert.match(projectCase, /automation:\s*\n\s+recommended:\s*false/);
+  assert.match(projectCase, /target:\s*not-automated-risk-note/);
+  assert.doesNotMatch(projectCase, /Response body echoes the submitted name/i);
+  assert.match(workedExample, /\|\s*TC-PROJ-001\s*\|\s*automate-later\s*\|/);
+
+  const authCase = workedExample.split('- id: TC-AUTH-002')[1]?.split('```')[0] || '';
+  const authDisposition = workedExample.match(/\|\s*TC-AUTH-002\s*\|([^\n]+)/)?.[1] || '';
+  if (/human-logic-risk/i.test(authDisposition)) assert.match(authCase, /logic_risk:\s*true/);
+
+  assert.match(workedExample, /from\s+["']\.\.\/\.\.\/src\/app\/api\/projects\/route["']/);
+});
+
 test('design-source adapters cover common product and design artifact modes', () => {
   const adapters = read('website-test-automation/references/design-source-adapters.md');
   for (const phrase of [
