@@ -41,7 +41,8 @@ documented_expectation: ""
 observed_behavior: ""
 human_expectation: ""
 why_unreasonable: ""
-severity: P1
+severity: S2
+priority: P1
 source:
   docs: []
   code: []
@@ -56,6 +57,7 @@ decision_needed: ""
 
 ## Conversion Rules
 
+- Record impact as `severity: S1` through `S4` and fix order as `priority: P0` through `P3`; keep both fields separate.
 - If the product logic is clearly wrong, create a `human-logic-risk` disposition and avoid durable regression automation until the behavior is accepted or fixed.
 - If the logic is unclear but high-risk, create an exploratory or manual case with `source_status: mismatch`.
 - If current behavior is temporarily intentional, document it as a characterization test and include the reason.

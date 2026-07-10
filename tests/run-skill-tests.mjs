@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { ENUMS } from '../website-test-automation/scripts/lib/testcase-schema.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const skillRoot = path.join(repoRoot, 'website-test-automation');
@@ -159,6 +160,42 @@ test('skill package validator rejects workflow order drift', () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /cases before coverage/i);
 });
 
+test('skill package validator rejects detailed workflow order drift', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-detailed-order-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  const rel = path.join(fixture, 'references', 'workflow.md');
+  const workflow = fs.readFileSync(rel, 'utf8');
+  fs.writeFileSync(
+    rel,
+    workflow.replace(
+      '5. Write source-backed test cases using the schema and quality rubric.\n6. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.',
+      '5. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.\n6. Write source-backed test cases using the schema and quality rubric.',
+    ),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /detailed workflow.*cases before coverage/i);
+});
+
+test('skill package validator rejects missing scenario branch terminals', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-branch-terminal-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  const rel = path.join(fixture, 'references', 'scenario-workflows.md');
+  const scenarios = fs.readFileSync(rel, 'utf8');
+  fs.writeFileSync(
+    rel,
+    scenarios.replace(
+      'For test-case authoring, stop after reporting; do not edit files or run automation unless implementation is explicitly requested.',
+      'For test-case authoring, continue after reporting.',
+    ),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /test-case authoring.*terminal/i);
+});
+
 test('skill package validator rejects missing human reasonableness contract', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-human-drift-'));
   fs.cpSync(skillRoot, fixture, { recursive: true });
@@ -301,6 +338,108 @@ test('main workflow orders coverage before post-case disposition', () => {
   assert.equal(disposition < automation, true);
 });
 
+test('detailed workflow and worked example order cases before coverage and disposition', () => {
+  const workflow = read('website-test-automation/references/workflow.md');
+  const steps = workflow.split('## Steps')[1].split('## Evidence Rules')[0];
+  const indexOf = (phrase) => steps.indexOf(phrase);
+  const productModel = indexOf('Build a product model');
+  const humanReview = indexOf('Human Reasonableness Review Gate');
+  const cases = indexOf('Write source-backed test cases');
+  const coverage = indexOf('Build or update a coverage matrix');
+  const disposition = indexOf('Post-Test-Case Disposition Gate');
+  const automation = indexOf('Select automation targets');
+  for (const index of [productModel, humanReview, cases, coverage, disposition, automation]) {
+    assert.notEqual(index, -1);
+  }
+  assert.equal(productModel < humanReview, true);
+  assert.equal(humanReview < cases, true);
+  assert.equal(cases < coverage, true);
+  assert.equal(coverage < disposition, true);
+  assert.equal(disposition < automation, true);
+
+  const workedExample = read('website-test-automation/references/worked-example.md');
+  const casesHeading = workedExample.indexOf('## Step 5 — Source-Backed Cases');
+  const coverageHeading = workedExample.indexOf('## Step 6 — Coverage Matrix');
+  const dispositionHeading = workedExample.indexOf('## Step 7 — Disposition Gate');
+  assert.equal(casesHeading >= 0, true);
+  assert.equal(casesHeading < coverageHeading, true);
+  assert.equal(coverageHeading < dispositionHeading, true);
+  assert.match(workedExample.slice(casesHeading, coverageHeading), /- id: TC-PROJ-001/);
+  const coverageSection = workedExample.slice(coverageHeading, dispositionHeading);
+  assert.match(coverageSection, /\| Product area \| Workflow \|/);
+  for (const row of coverageSection.split('\n').filter((line) => /^\| (?:auth\/session|projects) \|/.test(line))) {
+    const layer = row.split('|').map((cell) => cell.trim())[6];
+    assert.equal(ENUMS.layer.includes(layer), true, `worked-example coverage layer must be canonical: ${layer}`);
+  }
+});
+
+test('selected scenario branches have binding terminal behavior', () => {
+  const skill = read('website-test-automation/SKILL.md');
+  const scenarios = read('website-test-automation/references/scenario-workflows.md');
+  assert.match(skill, /selected scenario branch[^.]*terminal[^.]*later numbered steps do not override/i);
+
+  const rowFor = (name) => scenarios.split('\n').find((line) => line.startsWith(`| ${name} |`)) || '';
+  for (const name of ['Response-only review', 'Test-case authoring']) {
+    const row = rowFor(name);
+    assert.match(row, /cases/i);
+    assert.match(row, /coverage/i);
+    assert.match(row, /disposition/i);
+    assert.match(row, /report/i);
+    assert.match(row, /stop/i);
+    assert.match(row, /do not edit files or run automation/i);
+  }
+  assert.match(rowFor('Automation landing'), /implement[^|]*run targeted validation/i);
+});
+
+test('browser evidence is conditional on request, disposition, or browser acceptance', () => {
+  const contracts = [
+    'website-test-automation/references/automation-implementation.md',
+    'website-test-automation/references/browser-tool-adapters.md',
+    'website-test-automation/references/scenario-workflows.md',
+    'docs/PRD.md',
+    'docs/DEVELOPMENT_PLAN.md',
+  ].map(read);
+  for (const contract of contracts) {
+    assert.match(contract, /user explicitly requests[^.]*browser/i);
+    assert.match(contract, /disposition:\s*`?browser-smoke`?/i);
+    assert.match(contract, /browser behavior[^.]*acceptance signal/i);
+    assert.match(contract, /API[^.]*component[^.]*unit[^.]*job[^.]*CLI[^.]*library[^.]*do(?:es)? not (?:start|require) a browser/i);
+    assert.match(contract, /no scoped-skip reason/i);
+  }
+  const combined = contracts.join('\n').replace(/\s+/g, ' ');
+  assert.doesNotMatch(combined, /complete automation landing[^.]*browser[^.]*smoke/i);
+  assert.doesNotMatch(combined, /browser smoke evidence when UI behavior is involved/i);
+
+  const outputTemplates = read('website-test-automation/references/output-templates.md');
+  assert.doesNotMatch(outputTemplates, /^- Browser-agent smoke evidence:$/m);
+  assert.match(outputTemplates, /Browser-agent smoke evidence \(when required by the browser-evidence conditions\):/);
+});
+
+test('source status and execution blockers remain separate concepts', () => {
+  const workflow = read('website-test-automation/references/workflow.md');
+  const evidenceRules = workflow.split('## Evidence Rules')[1] || '';
+  for (const status of ['documented', 'inferred', 'observed', 'mismatch']) {
+    assert.match(evidenceRules, new RegExp(`\\b${status}\\b`, 'i'));
+  }
+  assert.match(evidenceRules, /blocked[^.]*evidence, execution, or gap status/i);
+  assert.doesNotMatch(evidenceRules, /Mark claims as[^.]*blocked/i);
+});
+
+test('logic findings ledger separates severity from priority', () => {
+  const human = read('website-test-automation/references/human-reasonableness.md');
+  const workedExample = read('website-test-automation/references/worked-example.md');
+  const outputTemplates = read('website-test-automation/references/output-templates.md');
+  const defects = read('website-test-automation/references/defect-reporting.md');
+  for (const ledger of [human, workedExample]) {
+    assert.match(ledger, /^severity:\s*S[1-4]$/m);
+    assert.match(ledger, /^priority:\s*P[0-3]$/m);
+    assert.doesNotMatch(ledger, /^severity:\s*P[0-3]$/m);
+  }
+  assert.match(outputTemplates, /\| ID \| Workflow \| Severity \| Priority \|/);
+  assert.doesNotMatch(defects, /P-label in its `severity` field/i);
+  assert.match(defects, /logic findings ledger[^.]*severity[^.]*priority/i);
+});
+
 test('human reasonableness gate is first-class and schema-backed', () => {
   const skill = read('website-test-automation/SKILL.md');
   const workflow = read('website-test-automation/references/workflow.md');
@@ -357,8 +496,8 @@ test('skill references and templates cover automation implementation', () => {
     'file placement',
     'fixtures',
     'deterministic assertions',
-    'browser-agent smoke evidence',
-    'scoped-skip reason',
+    'disposition: browser-smoke',
+    'acceptance signal',
     'Runner',
     'Code Review Checklist',
   ]) {
@@ -419,7 +558,8 @@ test('worked example is an honest source-repository planning walkthrough', () =>
     assert.doesNotMatch(workedExample, unsupportedClaim);
   }
   assert.match(workedExample, /projects\.spec\.ts` \(unwired; runtime status not verified\)/i);
-  assert.doesNotMatch(workedExample, /\b(?:failing|passing|passed|failed|results?)\b/i);
+  assert.doesNotMatch(workedExample, /\b(?:test|command) (?:passed|failed|ran) as evidence\b/i);
+  assert.doesNotMatch(workedExample, /\bactual (?:command )?(?:result|output):/i);
 
   const projectCase = workedExample.split('- id: TC-PROJ-001')[1]?.split('- id: TC-AUTH-002')[0] || '';
   assert.match(projectCase, /source_status:\s*mismatch/);
@@ -442,6 +582,9 @@ test('worked example is an honest source-repository planning walkthrough', () =>
   assert.equal(codeFenceStart > stepEightStart, true);
   assert.equal(proposedTestEnd > proposedTestStart, true);
   const proposedTest = workedExample.slice(proposedTestStart, proposedTestEnd);
+  assert.doesNotMatch(proposedTest, /Date\.now\s*\(/);
+  assert.match(proposedTest, /const\s+name\s*=\s*["']tc-proj-001-roadmap["']/);
+  assert.match(workedExample.slice(stepEightStart, proposedTestEnd), /isolated[^.]*reset fixture/i);
   assert.match(
     proposedTest,
     /^import\s*\{\s*GET\s*,\s*POST\s*\}\s*from\s*["']\.\.\/\.\.\/src\/app\/api\/projects\/route["']/m,

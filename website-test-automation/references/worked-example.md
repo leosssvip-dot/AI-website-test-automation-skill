@@ -45,7 +45,8 @@ documented_expectation: "Users log in before reaching /projects."
 observed_behavior: "Login page renders a 'Sign in' button with no fields and no action; clicking does nothing."
 human_expectation: "Entering credentials and clicking Sign in should authenticate, or show why it cannot."
 why_unreasonable: "A control that looks actionable but does nothing leaves the user stuck with no feedback or next step."
-severity: P1
+severity: S2
+priority: P1
 source:
   docs: ["docs/PRD.md"]
   code: ["src/app/login/page.tsx"]
@@ -68,15 +69,7 @@ The PRD and the code disagree. Do not flatten these into assumptions; carry them
 | Unique name | Name unique per account | POST echoes any name, no uniqueness check | Enforce uniqueness, or mark requirement deferred |
 | Edit / archive | User can edit and archive projects | No UI or API for edit/archive | Confirm scope; treat as coverage gap until built |
 
-## Step 5 — Coverage Matrix (excerpt)
-
-| Product area | Workflow | Risk | Source evidence | Source status | Layer | Priority | Current coverage | Gap / next action |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| auth/session | guard `/projects` | unauthorized access | PRD; `projects/page.tsx` | mismatch | route/middleware | P0 | none | Decide guard; add route test once behavior is set |
-| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired; runtime status not verified) | Decide persistence/uniqueness, implement, then add API tests |
-| projects | edit / archive | missing capability | PRD | documented | api/e2e | P1 | none | Build feature, then cover |
-
-## Step 6 — Source-Backed Cases
+## Step 5 — Source-Backed Cases
 
 Two representative cases (schema-complete; intended for `validate-testcases.mjs`). Both carry unresolved mismatches and are not safe to turn into durable regression automation yet.
 
@@ -112,7 +105,7 @@ Two representative cases (schema-complete; intended for `validate-testcases.mjs`
   negative_cases:
     - Missing name should be rejected once validation exists
   data_needs:
-    - A unique project name per run
+    - An isolated reset fixture that reserves the case-owned project name
   automation:
     recommended: false
     target: not-automated-risk-note
@@ -164,6 +157,14 @@ Two representative cases (schema-complete; intended for `validate-testcases.mjs`
 
 Both cases are `mismatch` records with `automation.recommended: false`. Do not write durable tests that bless the incomplete current behavior; surface and resolve the product decisions first.
 
+## Step 6 — Coverage Matrix (excerpt)
+
+| Product area | Workflow | Risk | Source evidence | Source status | Layer | Priority | Current coverage | Gap / next action |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| auth/session | guard `/projects` | unauthorized access | PRD; `projects/page.tsx` | mismatch | route | P0 | none | Decide guard; add route test once behavior is set |
+| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired; runtime status not verified) | Decide persistence/uniqueness, implement, then add API tests |
+| projects | edit / archive | missing capability | PRD | documented | api | P1 | none | Build feature, then cover |
+
 ## Step 7 — Disposition Gate
 
 | Case ID | Disposition | Layer | Why now / why not now | Next action |
@@ -174,7 +175,7 @@ Both cases are `mismatch` records with `automation.recommended: false`. Do not w
 
 ## Step 8 — Proposed Automation After the Product Decision
 
-Do not land or mark this test green against the current fixture. After the persistence and uniqueness contract is decided and implemented, a route test under `tests/api` should import the real handlers and verify state, not merely echo shape:
+Do not land or mark this test green against the current fixture. After the persistence and uniqueness contract is decided and implemented, a route test under `tests/api` should import the real handlers and verify state, not merely echo shape. The proposed test depends on an isolated reset fixture that owns the fixed case value; it does not claim that such a fixture already exists or has run:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -182,7 +183,7 @@ import { GET, POST } from "../../src/app/api/projects/route";
 
 describe("POST /api/projects (TC-PROJ-001)", () => {
   it("persists the created project for subsequent reads", async () => {
-    const name = `Roadmap-${Date.now()}`;
+    const name = "tc-proj-001-roadmap";
     const req = new Request("http://test/api/projects", {
       method: "POST",
       body: JSON.stringify({ name }),

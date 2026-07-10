@@ -131,6 +131,9 @@ if (exists('SKILL.md')) {
   for (const phrase of ['Test cases first', 'Playwright is one adapter family', 'Redact']) {
     if (!skill.includes(phrase)) errors.push(`SKILL.md missing contract phrase: ${phrase}`);
   }
+  if (!/selected scenario branch[^.]*terminal[^.]*later numbered steps do not override/i.test(skill)) {
+    errors.push('SKILL.md must make the selected scenario branch terminal override later numbered steps.');
+  }
   for (const phrase of ['MasterGo', 'MockingBot', 'Sketch', 'Zeplin', 'prototypes']) {
     if (!new RegExp(phrase, 'i').test(skill)) errors.push(`SKILL.md workflow missing design-source phrase: ${phrase}`);
   }
@@ -154,6 +157,44 @@ if (exists('SKILL.md')) {
     )
   ) {
     errors.push('SKILL.md workflow must order product model before Human Reasonableness Review Gate, human review before cases, cases before coverage, coverage before disposition, and disposition before automation selection.');
+  }
+}
+
+if (exists('references/workflow.md')) {
+  const detailedWorkflow = read('references/workflow.md');
+  const steps = detailedWorkflow.split('## Steps')[1]?.split('## Evidence Rules')[0] || '';
+  const stepIndex = (phrase) => steps.indexOf(phrase);
+  const productModelStep = stepIndex('Build a product model');
+  const humanStep = stepIndex('Human Reasonableness Review Gate');
+  const caseStep = stepIndex('Write source-backed test cases');
+  const coverageStep = stepIndex('Build or update a coverage matrix');
+  const dispositionStep = stepIndex('Post-Test-Case Disposition Gate');
+  const automationStep = stepIndex('Select automation targets');
+  if (
+    [productModelStep, humanStep, caseStep, coverageStep, dispositionStep, automationStep].some((index) => index < 0) ||
+    !(
+      productModelStep < humanStep &&
+      humanStep < caseStep &&
+      caseStep < coverageStep &&
+      coverageStep < dispositionStep &&
+      dispositionStep < automationStep
+    )
+  ) {
+    errors.push('Detailed workflow must order product model before human review, human review before cases, cases before coverage, coverage before disposition, and disposition before automation.');
+  }
+}
+
+if (exists('references/scenario-workflows.md')) {
+  const scenarios = read('references/scenario-workflows.md');
+  const authoringTerminal = 'For test-case authoring, stop after reporting; do not edit files or run automation unless implementation is explicitly requested.';
+  const rowFor = (name) => scenarios.split('\n').find((line) => line.startsWith(`| ${name} |`)) || '';
+  const responseRow = rowFor('Response-only review');
+  const authoringRow = rowFor('Test-case authoring');
+  if (!/stop[^|]*do not edit files or run automation/i.test(responseRow)) {
+    errors.push('Response-only scenario terminal must stop before file edits or automation.');
+  }
+  if (!scenarios.includes(authoringTerminal) || !/stop[^|]*do not edit files or run automation/i.test(authoringRow)) {
+    errors.push('Test-case authoring scenario terminal must stop before file edits or automation.');
   }
 }
 

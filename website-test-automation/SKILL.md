@@ -16,7 +16,7 @@ For a concrete planning pass on a small authenticated CRUD app — from context 
 ## Workflow
 
 1. Discover product and repo context with [workflow.md](references/workflow.md).
-2. Classify the request and follow the matching Scenario Workflow in [scenario-workflows.md](references/scenario-workflows.md).
+2. Classify the request and follow the matching Scenario Workflow in [scenario-workflows.md](references/scenario-workflows.md). Treat the selected scenario branch as a terminal contract: follow only that branch, stop at its terminal, and remember that later numbered steps do not override the stop.
 3. Build a product model with [product-understanding.md](references/product-understanding.md).
 4. Run the Human Reasonableness Review Gate with [human-reasonableness.md](references/human-reasonableness.md).
 5. Convert design artifacts with [design-source-adapters.md](references/design-source-adapters.md) when inputs include Figma, Lanhu, MasterGo, MockingBot, Sketch, Zeplin, Storybook, screenshots, videos, specs, prototypes, or design tokens.

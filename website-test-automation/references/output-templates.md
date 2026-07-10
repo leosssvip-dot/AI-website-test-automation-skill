@@ -65,8 +65,8 @@ Use this when the user asked for review, planning, or agent-style output without
 | --- | --- | --- | --- | --- |
 
 ## Logic Findings Ledger
-| ID | Workflow | Persona | Documented expectation | Observed behavior | Human expectation | Why unreasonable | Severity | Suggested product fix |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ID | Workflow | Severity | Priority | Persona | Documented expectation | Observed behavior | Human expectation | Why unreasonable | Suggested product fix |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 ## Coverage Matrix
 | Product area | Workflow | Risk | Source evidence | Source status | Test layer | Priority | Automation feasibility | Gap |
@@ -175,7 +175,7 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Files to create or update:
 - Commands:
 - Assertions:
-- Browser-agent smoke evidence:
+- Browser-agent smoke evidence (when required by the browser-evidence conditions):
 - Evidence expected:
 - Cases left manual:
 - Risks:
@@ -190,7 +190,7 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Files changed:
 - Runner:
 - Command result:
-- Browser-agent smoke evidence:
+- Browser-agent smoke evidence (when required by the browser-evidence conditions):
 - Failure artifacts:
 - Remaining gaps:
 - Manual/provider-live cases:

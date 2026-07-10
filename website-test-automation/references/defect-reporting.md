@@ -25,7 +25,7 @@ Severity measures impact; priority measures fix order. Set both; do not blend th
 | S4 | Cosmetic | spacing, non-blocking visual drift |
 
 - Default mapping: S1 to P0, S2 to P1, S3 to P2, S4 to P3; adjust for release context — an S3 in tomorrow's launch flow can be P1.
-- The logic findings ledger records a P-label in its `severity` field (a fix-order label); when a finding becomes a defect, set S-severity from the impact table above and start priority from the ledger label. File logic findings as defects only after the product decision says current behavior is wrong ([human-reasonableness.md](human-reasonableness.md)).
+- The logic findings ledger records both S-severity and P-priority. When a finding becomes a defect, preserve its impact severity, reassess priority for the release context, and file it only after the product decision says current behavior is wrong ([human-reasonableness.md](human-reasonableness.md)).
 
 ## Quality Rules
 

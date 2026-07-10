@@ -49,4 +49,4 @@ Do not choose Playwright by habit. If the repo already covers the behavior with 
 
 Example: for a review-only request on a Next.js app with Vitest route tests and React Testing Library coverage, recommend API/component regression for contracts, Codex Browser for local screenshot and network-negative smoke, Chrome for real authenticated/live profile checks, and Playwright runner only if the user selects cases for durable scripted browser regression.
 
-For complete automation landing, include at least one browser-smoke evidence item or an explicit scoped-skip reason. Use `assets/checklists/browser-smoke-evidence.md` when the evidence has more than one browser observation.
+Browser evidence is required only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal. Pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason. Use `assets/checklists/browser-smoke-evidence.md` when the required evidence has more than one browser observation.
