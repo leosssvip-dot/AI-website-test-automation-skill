@@ -13,7 +13,17 @@ Run this gate whenever new or revised test cases are produced.
 5. Execute only the next action implied by the user request. For response-only review, stop after reporting; do not edit files or run automation unless implementation is explicitly requested. For test-case authoring, stop after reporting; do not edit files or run automation unless implementation is explicitly requested. For automation landing, continue to edit tests and run targeted validation. For live/provider work, require explicit authorization before real external completion.
 6. Report remaining gaps and why each unimplemented case was not automated now.
 
-Browser evidence is required only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal. Pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
+## Browser Evidence Condition
+
+Browser evidence is required when any of these conditions applies:
+
+1. The user explicitly requests browser evidence, such as a screenshot, interactive check, or Network panel inspection.
+2. A selected case has `disposition: browser-smoke`.
+3. Browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal.
+
+These conditions take precedence over the case surface and layer. For example, Network panel inspection of an API explicitly requested through a browser requires browser evidence, and a browser-rendered component whose interaction is an acceptance signal requires browser evidence.
+
+When none of those conditions applies, pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
 
 ## Scenario Workflow Matrix
 

@@ -128,7 +128,7 @@ Build the `website-test-automation` skill described in the PRD: a product-ground
 - Forward tests demonstrate PRD/source/plan-driven test case generation.
 - Forward tests demonstrate at least two browser adapter families, one exploratory/browser-agent path and one durable test-runner path.
 - Automation guidance can produce concrete test file skeletons, commands, fixtures, and evidence expectations for common website stacks.
-- Browser evidence is required only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal. Pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
+- Browser evidence is required when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior is itself an acceptance signal. These conditions take precedence over surface and layer. When none of those conditions applies, pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
 - Mature handoffs include a readiness score or explicit gap list across product understanding, test design, coverage, automation, evidence, CI/flaky, provider/live, and specialized quality checks.
 - Repository validation runs in CI without private credentials or paid services.
 - Documentation clearly separates PRD requirements from roadmap and task records.

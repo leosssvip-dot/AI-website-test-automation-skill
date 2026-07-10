@@ -10,7 +10,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 4. Decide file placement from the repo's existing layout; otherwise use a conventional path such as `tests/e2e`, `tests/api`, `src/**/*.test.tsx`, or `cypress/e2e`.
 5. Implement deterministic assertions for state, route, response, DOM, accessibility, network, or artifact outcomes. Judge assertion strength with [test-quality.md](test-quality.md), and for API, route, or service boundaries follow [api-contract-testing.md](api-contract-testing.md) for contract and state verification.
 6. Add fixtures only when the case needs stable data. Keep secrets, customer data, and provider payloads out of fixtures.
-7. Browser evidence is required only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal. Pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
+7. Apply the canonical [Browser Evidence Condition](scenario-workflows.md#browser-evidence-condition). When it applies, collect the smallest browser evidence that proves the selected acceptance signal; otherwise do not start a browser or manufacture a scoped-skip reason.
 8. Run the narrowest command that covers the new tests, then report command, result, failures, and artifacts.
 9. If a selected case cannot be automated safely, persist `disposition` as `manual`, `exploratory`, or `risk-note`, set the matching `automation.target` to `manual`, `exploratory`, or `not-automated-risk-note`, and explain the blocker.
 
@@ -21,7 +21,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 - Runner and command.
 - Fixture/data setup.
 - Assertions implemented.
-- Browser-agent smoke evidence when required by the browser-evidence conditions.
+- Browser-agent smoke evidence when the [Browser Evidence Condition](scenario-workflows.md#browser-evidence-condition) applies.
 - Evidence artifacts expected on failure.
 - Known gaps and cases intentionally left manual.
 
@@ -52,6 +52,6 @@ Use this reference after source-backed test cases exist and the user asks to imp
 - Tests own or reset their data.
 - Third-party services are mocked unless the case is explicitly manual/live.
 - Failure artifacts are enabled for browser runner tests.
-- Browser evidence follows the request, case disposition, or browser acceptance signal; non-browser work does not manufacture browser evidence or a scoped-skip reason.
+- Browser evidence follows the [Browser Evidence Condition](scenario-workflows.md#browser-evidence-condition).
 - Commands are scoped and documented.
 - New tests are not duplicating lower-layer coverage without adding confidence.

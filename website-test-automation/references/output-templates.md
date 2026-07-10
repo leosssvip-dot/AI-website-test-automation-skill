@@ -175,7 +175,7 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Files to create or update:
 - Commands:
 - Assertions:
-- Browser-agent smoke evidence (when required by the browser-evidence conditions):
+- Browser-agent smoke evidence (when the [Browser Evidence Condition](scenario-workflows.md#browser-evidence-condition) applies; otherwise omit without a scoped-skip reason):
 - Evidence expected:
 - Cases left manual:
 - Risks:
@@ -190,7 +190,7 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Files changed:
 - Runner:
 - Command result:
-- Browser-agent smoke evidence (when required by the browser-evidence conditions):
+- Browser-agent smoke evidence (when the [Browser Evidence Condition](scenario-workflows.md#browser-evidence-condition) applies; otherwise omit without a scoped-skip reason):
 - Failure artifacts:
 - Remaining gaps:
 - Manual/provider-live cases:

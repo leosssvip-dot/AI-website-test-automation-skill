@@ -162,8 +162,9 @@ if (exists('SKILL.md')) {
 
 if (exists('references/workflow.md')) {
   const detailedWorkflow = read('references/workflow.md');
-  const steps = detailedWorkflow.split('## Steps')[1]?.split('## Evidence Rules')[0] || '';
-  const stepIndex = (phrase) => steps.indexOf(phrase);
+  const stepsSection = detailedWorkflow.split('## Steps')[1]?.split('## Evidence Rules')[0] || '';
+  const numberedSteps = stepsSection.split('\n').filter((line) => /^\d+\./.test(line));
+  const stepIndex = (phrase) => numberedSteps.findIndex((line) => line.includes(phrase));
   const productModelStep = stepIndex('Build a product model');
   const humanStep = stepIndex('Human Reasonableness Review Gate');
   const caseStep = stepIndex('Write source-backed test cases');
@@ -186,14 +187,13 @@ if (exists('references/workflow.md')) {
 
 if (exists('references/scenario-workflows.md')) {
   const scenarios = read('references/scenario-workflows.md');
-  const authoringTerminal = 'For test-case authoring, stop after reporting; do not edit files or run automation unless implementation is explicitly requested.';
   const rowFor = (name) => scenarios.split('\n').find((line) => line.startsWith(`| ${name} |`)) || '';
   const responseRow = rowFor('Response-only review');
   const authoringRow = rowFor('Test-case authoring');
   if (!/stop[^|]*do not edit files or run automation/i.test(responseRow)) {
     errors.push('Response-only scenario terminal must stop before file edits or automation.');
   }
-  if (!scenarios.includes(authoringTerminal) || !/stop[^|]*do not edit files or run automation/i.test(authoringRow)) {
+  if (!/stop[^|]*do not edit files or run automation/i.test(authoringRow)) {
     errors.push('Test-case authoring scenario terminal must stop before file edits or automation.');
   }
 }

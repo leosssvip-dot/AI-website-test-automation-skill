@@ -165,11 +165,15 @@ test('skill package validator rejects detailed workflow order drift', () => {
   fs.cpSync(skillRoot, fixture, { recursive: true });
   const rel = path.join(fixture, 'references', 'workflow.md');
   const workflow = fs.readFileSync(rel, 'utf8');
+  const reversed = workflow.replace(
+    '5. Write source-backed test cases using the schema and quality rubric.\n6. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.',
+    '5. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.\n6. Write source-backed test cases using the schema and quality rubric.',
+  );
   fs.writeFileSync(
     rel,
-    workflow.replace(
-      '5. Write source-backed test cases using the schema and quality rubric.\n6. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.',
-      '5. Build or update a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.\n6. Write source-backed test cases using the schema and quality rubric.',
+    reversed.replace(
+      '## Steps\n',
+      '## Steps\n\nDecoy prose mentions Build a product model, Human Reasonableness Review Gate, Write source-backed test cases, Build or update a coverage matrix, Post-Test-Case Disposition Gate, and Select automation targets in the desired order.\n',
     ),
   );
 
@@ -183,11 +187,15 @@ test('skill package validator rejects missing scenario branch terminals', () => 
   fs.cpSync(skillRoot, fixture, { recursive: true });
   const rel = path.join(fixture, 'references', 'scenario-workflows.md');
   const scenarios = fs.readFileSync(rel, 'utf8');
+  const authoringRow = scenarios.split('\n').find((line) => line.startsWith('| Test-case authoring |')) || '';
   fs.writeFileSync(
     rel,
     scenarios.replace(
-      'For test-case authoring, stop after reporting; do not edit files or run automation unless implementation is explicitly requested.',
-      'For test-case authoring, continue after reporting.',
+      authoringRow,
+      authoringRow.replace(
+        'and stop; do not edit files or run automation unless implementation is explicitly requested.',
+        'and continue into automation.',
+      ),
     ),
   );
 
@@ -391,28 +399,46 @@ test('selected scenario branches have binding terminal behavior', () => {
   assert.match(rowFor('Automation landing'), /implement[^|]*run targeted validation/i);
 });
 
-test('browser evidence is conditional on request, disposition, or browser acceptance', () => {
-  const contracts = [
+test('browser evidence condition has explicit precedence and referenced consumers', () => {
+  const scenarios = read('website-test-automation/references/scenario-workflows.md');
+  const condition = scenarios.split('## Browser Evidence Condition')[1]?.split('\n## ')[0] || '';
+  assert.notEqual(condition, '', 'scenario-workflows.md must own the canonical browser evidence condition');
+  assert.match(condition, /user explicitly requests[^.]*browser/i);
+  assert.match(condition, /disposition:\s*`?browser-smoke`?/i);
+  assert.match(condition, /browser behavior[^.]*acceptance signal/i);
+  assert.match(condition, /conditions take precedence over[^.]*surface[^.]*layer/i);
+  assert.match(condition, /Network panel[^.]*API[^.]*requires browser evidence/i);
+  assert.match(condition, /browser-rendered component[^.]*requires browser evidence/i);
+  assert.match(condition, /When none of those conditions applies/i);
+  assert.match(condition, /API[^.]*component[^.]*unit[^.]*job[^.]*CLI[^.]*library[^.]*do(?:es)? not (?:start|require) a browser/i);
+  assert.match(condition, /no scoped-skip reason/i);
+
+  for (const rel of [
     'website-test-automation/references/automation-implementation.md',
     'website-test-automation/references/browser-tool-adapters.md',
-    'website-test-automation/references/scenario-workflows.md',
-    'docs/PRD.md',
-    'docs/DEVELOPMENT_PLAN.md',
-  ].map(read);
-  for (const contract of contracts) {
+    'website-test-automation/references/output-templates.md',
+  ]) {
+    assert.match(read(rel), /scenario-workflows\.md#browser-evidence-condition/);
+  }
+
+  const productContracts = [read('docs/PRD.md'), read('docs/DEVELOPMENT_PLAN.md')];
+  for (const contract of productContracts) {
     assert.match(contract, /user explicitly requests[^.]*browser/i);
     assert.match(contract, /disposition:\s*`?browser-smoke`?/i);
     assert.match(contract, /browser behavior[^.]*acceptance signal/i);
+    assert.match(contract, /When none of those conditions applies/i);
     assert.match(contract, /API[^.]*component[^.]*unit[^.]*job[^.]*CLI[^.]*library[^.]*do(?:es)? not (?:start|require) a browser/i);
     assert.match(contract, /no scoped-skip reason/i);
   }
-  const combined = contracts.join('\n').replace(/\s+/g, ' ');
+
+  const combined = [scenarios, ...productContracts].join('\n').replace(/\s+/g, ' ');
   assert.doesNotMatch(combined, /complete automation landing[^.]*browser[^.]*smoke/i);
   assert.doesNotMatch(combined, /browser smoke evidence when UI behavior is involved/i);
+  assert.doesNotMatch(combined, /unless the user explicitly limit(?:s|ed) scope to API/i);
 
   const outputTemplates = read('website-test-automation/references/output-templates.md');
   assert.doesNotMatch(outputTemplates, /^- Browser-agent smoke evidence:$/m);
-  assert.match(outputTemplates, /Browser-agent smoke evidence \(when required by the browser-evidence conditions\):/);
+  assert.match(outputTemplates, /Browser-agent smoke evidence \(when the \[Browser Evidence Condition\]\(scenario-workflows\.md#browser-evidence-condition\) applies; otherwise omit without a scoped-skip reason\):/);
 });
 
 test('source status and execution blockers remain separate concepts', () => {
@@ -496,8 +522,7 @@ test('skill references and templates cover automation implementation', () => {
     'file placement',
     'fixtures',
     'deterministic assertions',
-    'disposition: browser-smoke',
-    'acceptance signal',
+    'scenario-workflows.md#browser-evidence-condition',
     'Runner',
     'Code Review Checklist',
   ]) {

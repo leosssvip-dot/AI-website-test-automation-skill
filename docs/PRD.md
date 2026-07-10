@@ -83,7 +83,7 @@ The skill must classify flaky or failing browser tests into practical categories
 
 The skill must help agents convert selected source-backed test cases into concrete automated tests. It must cover file placement, fixture/data setup, deterministic assertions, command selection, evidence artifacts, and code review checks across existing project runners and browser adapters.
 
-Browser evidence is required only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior such as interaction, visual layout, responsive behavior, or a cross-page workflow is itself an acceptance signal. Pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
+Browser evidence is required when any of these conditions applies: the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior is itself an acceptance signal. These conditions take precedence over surface and layer. When none of those conditions applies, pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
 
 ### FR-11: Skill Self-Testing And CI
 
@@ -205,7 +205,7 @@ evidence:
 - The skill can choose among multiple browser adapter families.
 - The skill can produce both human-readable QA artifacts and automation-ready guidance.
 - The skill can guide implementation of concrete automated tests in existing project stacks.
-- Browser evidence is included only when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior is itself an acceptance signal; pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
+- Browser evidence is included when the user explicitly requests browser evidence, a selected case has `disposition: browser-smoke`, or browser behavior is itself an acceptance signal. When none of those conditions applies, pure API, component, unit, job, CLI, or library work does not start a browser and needs no scoped-skip reason.
 - The repository can validate the skill package and helper behavior automatically.
 - The skill can record evidence and known gaps without leaking secrets or sensitive data.
 - The skill can produce a readiness score and gap list across the major website testing workstreams.
