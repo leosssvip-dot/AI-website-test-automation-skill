@@ -14,6 +14,8 @@ import path from 'node:path';
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const VALID_EXT = /\.(ya?ml|json)$/i;
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
+const BLOCK_SCALAR_MARKER = /^[|>](?:(?:[+-][1-9]?)|(?:[1-9][+-]?))?$/;
+const ANCHOR_OR_ALIAS = /^[&*][^\s,[\]{}]+(?:\s|$)/;
 
 function indentOf(line) {
   return line.match(/^(\s*)/)[1].replace(/\t/g, '  ').length;
@@ -128,6 +130,8 @@ function parseKey(raw) {
   if (value === '') throw new Error('Empty mapping key');
   const startsQuoted = value.startsWith('"') || value.startsWith("'");
   const key = startsQuoted ? parseQuotedScalar(value) : value;
+  if (!startsQuoted && key === '<<') throw new Error('Unsupported YAML merge key');
+  if (!startsQuoted && ANCHOR_OR_ALIAS.test(key)) throw new Error('Unsupported YAML anchor or alias');
   if (DANGEROUS_KEYS.has(key)) throw new Error(`Unsafe mapping key: ${key}`);
   return key;
 }
@@ -161,6 +165,9 @@ function parseScalar(raw) {
   const startsQuoted = value.startsWith('"') || value.startsWith("'");
   if (startsQuoted) return parseQuotedScalar(value);
 
+  if (BLOCK_SCALAR_MARKER.test(value)) throw new Error('Unsupported YAML block scalar');
+  if (ANCHOR_OR_ALIAS.test(value)) throw new Error('Unsupported YAML anchor or alias');
+
   if (value.startsWith('[') && value.endsWith(']')) return parseFlowSeq(value);
   if (value.startsWith('{') && value.endsWith('}')) return parseFlowMap(value);
   if ((value.startsWith('[') && value.endsWith('}')) || (value.startsWith('{') && value.endsWith(']'))) {
@@ -186,8 +193,7 @@ function parseLines(lines) {
     let index = 0;
     while (index < lines.length) {
       if (indentOf(lines[index]) !== baseIndent) {
-        index += 1;
-        continue;
+        throw new Error('Unexpected indentation');
       }
       if (!/^-(\s|$)/.test(lines[index].trim())) throw new Error('Mixed sequence and mapping entries');
       const { block, end } = childBlock(lines, index, baseIndent);
@@ -207,8 +213,7 @@ function parseLines(lines) {
   let index = 0;
   while (index < lines.length) {
     if (indentOf(lines[index]) !== baseIndent) {
-      index += 1;
-      continue;
+      throw new Error('Unexpected indentation');
     }
     const line = lines[index].trim();
     const colon = line.indexOf(':');
@@ -246,17 +251,20 @@ export function parseDocument(text) {
   const cases = [];
   for (const doc of docs) {
     const value = parseLines(doc);
-    if (Array.isArray(value)) cases.push(...value.filter((item) => item && typeof item === 'object'));
-    else if (value && typeof value === 'object') cases.push(value);
+    if (Array.isArray(value)) cases.push(...value);
+    else cases.push(value);
   }
   return cases;
 }
 
 export function loadCases(file) {
+  const stat = fs.lstatSync(file);
+  if (stat.isSymbolicLink()) throw new Error(`Input path is a symbolic link: ${file}`);
+  if (!stat.isFile()) throw new Error(`Input must be a regular file: ${file}`);
   const text = fs.readFileSync(file, 'utf8');
-  if (file.endsWith('.json')) {
+  if (/\.json$/i.test(file)) {
     const parsed = JSON.parse(text);
-    return (Array.isArray(parsed) ? parsed : [parsed]).filter((value) => value && typeof value === 'object');
+    return Array.isArray(parsed) ? parsed : [parsed];
   }
   return parseDocument(text);
 }

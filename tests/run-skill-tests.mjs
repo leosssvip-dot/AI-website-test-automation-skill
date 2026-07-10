@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -69,6 +69,23 @@ function validTestCase(overrides = {}) {
     unknowns: [],
     ...overrides,
   };
+}
+
+function validYamlLines() {
+  return [
+    'id: TC-YAML-001',
+    'title: Valid title',
+    'source:',
+    '  docs: ["docs/PRD.md"]',
+    '  code: []',
+    '  observed: []',
+    'source_status: documented',
+    'type: api',
+    'priority: P2',
+    'steps: [Call endpoint]',
+    'expected: [Returns 200]',
+    'automation: {recommended: false, target: manual}',
+  ];
 }
 
 function test(name, fn) {
@@ -910,11 +927,74 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
   assert.equal(jsonResult.totalCases, 1);
   assert.equal(jsonResult.ok, true);
 
-  // A JSON array of scalars must report "no test cases found", not crash.
+  // Scalar array members are preserved and rejected by the shared schema.
   fs.writeFileSync(path.join(dir, 'scalars.json'), '[1, "two"]');
   const scalarResult = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', path.join(dir, 'scalars.json')]);
   assert.equal(scalarResult.status, 1);
-  assert.match(scalarResult.stdout, /no test cases found/);
+  const scalarSummary = JSON.parse(scalarResult.stdout);
+  assert.equal(scalarSummary.totalCases, 2);
+  assert.equal(scalarSummary.errors.filter((error) => /test case must be a plain object/.test(error)).length, 2);
+});
+
+test('validate-testcases fails closed when JSON arrays or YAML sequences contain scalar members', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-mixed-members-'));
+  const jsonFile = path.join(dir, 'mixed.json');
+  const yamlFile = path.join(dir, 'mixed.yaml');
+  fs.writeFileSync(jsonFile, JSON.stringify([validTestCase(), 'not-a-case', null]));
+  fs.writeFileSync(yamlFile, `${read('tests/fixtures/testcases/valid.yaml').trimEnd()}\n- not-a-case\n`);
+
+  const jsonResult = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', jsonFile]);
+  assert.equal(jsonResult.status, 1, `mixed JSON must fail\n${jsonResult.stdout}\n${jsonResult.stderr}`);
+  const jsonSummary = JSON.parse(jsonResult.stdout);
+  assert.equal(jsonSummary.totalCases, 3);
+  assert.equal(jsonSummary.errors.filter((error) => /test case must be a plain object/.test(error)).length, 2);
+
+  const yamlResult = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', yamlFile]);
+  assert.equal(yamlResult.status, 1, `mixed YAML must fail\n${yamlResult.stdout}\n${yamlResult.stderr}`);
+  const yamlSummary = JSON.parse(yamlResult.stdout);
+  assert.equal(yamlSummary.totalCases, 2);
+  assert.match(yamlSummary.errors.join('\n'), /test case must be a plain object/);
+
+  const exported = runRaw('node', ['website-test-automation/scripts/export-testcases.mjs', jsonFile]);
+  assert.equal(exported.status, 1);
+  assert.equal(exported.stdout, '');
+  assert.match(exported.stderr, /schema error:.*test case must be a plain object/s);
+});
+
+test('validate-testcases treats directories with no supported regular files as invalid input sets', () => {
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-empty-dir-'));
+  const symlinkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-symlink-only-'));
+  const unsupportedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-unsupported-only-'));
+  const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-empty-outside-')), 'outside.json');
+  fs.writeFileSync(outside, JSON.stringify(validTestCase()));
+  fs.symlinkSync(outside, path.join(symlinkDir, 'outside.json'));
+  fs.writeFileSync(path.join(unsupportedDir, 'cases.txt'), JSON.stringify(validTestCase()));
+
+  for (const dir of [emptyDir, symlinkDir, unsupportedDir]) {
+    const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', dir]);
+    assert.equal(result.status, 1, `${dir} must fail\n${result.stdout}\n${result.stderr}`);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.ok, false);
+    assert.equal(summary.totalFiles, 0);
+    assert.equal(summary.totalCases, 0);
+    assert.match(summary.errors.join('\n'), /no test case files|no test cases/i);
+  }
+});
+
+test('test-case loading handles supported extensions case-insensitively and parses uppercase JSON as JSON', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-uppercase-ext-'));
+  const upperJson = path.join(dir, 'case.JSON');
+  const upperYaml = path.join(dir, 'case.YAML');
+  const upperYml = path.join(dir, 'case.YML');
+  fs.writeFileSync(upperJson, JSON.stringify(validTestCase(), null, 2));
+  fs.writeFileSync(upperYaml, read('tests/fixtures/testcases/valid.yaml'));
+  fs.writeFileSync(upperYml, read('tests/fixtures/testcases/valid.yaml'));
+
+  for (const file of [upperJson, upperYaml, upperYml]) {
+    const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', file]);
+    assert.equal(result.status, 0, `${file} must parse\n${result.stdout}\n${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout).totalCases, 1);
+  }
 });
 
 test('validate-testcases rejects malformed required and optional field types', () => {
@@ -1025,6 +1105,35 @@ test('validate-testcases rejects unsafe keys, broken quotes, and malformed flow 
   assert.equal(parsed.files.every((report) => report.errors.some((error) => /parse error/i.test(error))), true);
 });
 
+test('validate-testcases reports unsupported YAML constructs and unexpected indentation as parse errors', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-unsupported-yaml-'));
+  const base = validYamlLines();
+  const fixtures = {
+    'literal-block.yaml': base.flatMap((line) =>
+      line.startsWith('title:') ? ['title: |', '  Multiline title'] : [line],
+    ),
+    'folded-block.yaml': base.flatMap((line) =>
+      line.startsWith('title:') ? ['title: >-', '  Folded title'] : [line],
+    ),
+    'anchor.yaml': base.map((line) => (line === 'source:' ? 'source: &source' : line)),
+    'alias.yaml': base.map((line) => (line === 'source:' ? 'source: *source' : line)),
+    'merge-key.yaml': base.flatMap((line) => (line === 'source:' ? ['source:', '  <<: *defaults'] : [line])),
+    'unexpected-indent.yaml': base.flatMap((line) =>
+      line.startsWith('id:') ? [line, '  ignored: value'] : [line],
+    ),
+  };
+  for (const [name, lines] of Object.entries(fixtures)) fs.writeFileSync(path.join(dir, name), lines.join('\n'));
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', dir]);
+  assert.equal(result.status, 1, `unsupported YAML must fail\n${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.totalFiles, Object.keys(fixtures).length);
+  assert.equal(
+    summary.files.every((report) => report.errors.some((error) => /parse error/i.test(error))),
+    true,
+  );
+});
+
 test('validate-testcases preserves quotes and apostrophes inside plain YAML scalars', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-plain-quotes-'));
   const file = path.join(dir, 'plain-quotes.yaml');
@@ -1098,6 +1207,36 @@ test('test-case collection skips directory symlinks and rejects direct symlink o
   assert.match(unsupportedResult.stderr, /supported YAML\/JSON file/i);
 });
 
+test('loadCases re-checks and rejects symbolic links immediately before reading', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-loader-symlink-'));
+  const target = path.join(dir, 'target.json');
+  const link = path.join(dir, 'link.json');
+  fs.writeFileSync(target, JSON.stringify(validTestCase()));
+  fs.symlinkSync(target, link);
+  const loaderUrl = pathToFileURL(path.join(skillRoot, 'scripts/lib/yaml-testcases.mjs')).href;
+  const result = runRaw(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `import { loadCases } from ${JSON.stringify(loaderUrl)}; loadCases(${JSON.stringify(link)});`,
+  ]);
+
+  assert.equal(result.status, 1, `loader must reject symlink\n${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /symbolic link/i);
+});
+
+test('loadCases re-checks and rejects non-regular files immediately before reading', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-loader-directory-'));
+  const loaderUrl = pathToFileURL(path.join(skillRoot, 'scripts/lib/yaml-testcases.mjs')).href;
+  const result = runRaw(process.execPath, [
+    '--input-type=module',
+    '--eval',
+    `import { loadCases } from ${JSON.stringify(loaderUrl)}; loadCases(${JSON.stringify(dir)});`,
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /regular file/i);
+});
+
 test('tester-facing references cover design techniques, exploratory, defects, and black-box', () => {
   const techniques = read('website-test-automation/references/test-design-techniques.md');
   for (const phrase of ['Equivalence Partitioning', 'Boundary Value', 'Decision Table', 'State Transition', 'Pairwise', 'Error Guessing']) {
@@ -1137,6 +1276,48 @@ test('output templates include defect report and release test plan', () => {
   assert.match(outputTemplates, /## Release Test Plan/);
   assert.match(outputTemplates, /Entry criteria/);
   assert.match(outputTemplates, /Exit criteria/);
+});
+
+test('validate-testcases rejects missing, empty, or unsupported format values as usage errors', () => {
+  const input = 'tests/fixtures/testcases/valid.yaml';
+  for (const args of [[input, '--format'], [input, '--format='], [input, '--format', 'xml']]) {
+    const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', ...args]);
+    assert.equal(result.status, 2, `${args.join(' ')} must be a usage error\n${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /Usage: validate-testcases\.mjs/);
+    assert.doesNotMatch(result.stdout, /"totalFiles"/);
+  }
+});
+
+test('export-testcases rejects missing, empty, or unsupported option values without exporting', () => {
+  const input = 'tests/fixtures/testcases/valid.yaml';
+  const invalidArgs = [
+    [input, '--out'],
+    [input, '--out='],
+    [input, '--format'],
+    [input, '--format='],
+    [input, '--format', 'xml'],
+  ];
+  for (const args of invalidArgs) {
+    const result = runRaw('node', ['website-test-automation/scripts/export-testcases.mjs', ...args]);
+    assert.equal(result.status, 2, `${args.join(' ')} must be a usage error\n${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /Usage: export-testcases\.mjs/);
+    assert.doesNotMatch(result.stdout, /^"ID"/m);
+  }
+});
+
+test('export-testcases preserves equals signs in --out=<path> values', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-out-equals-'));
+  const out = path.join(dir, 'cases=review.csv');
+  const result = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    'tests/fixtures/testcases/valid.yaml',
+    `--out=${out}`,
+  ]);
+
+  assert.equal(result.status, 0, `equals path must export\n${result.stdout}\n${result.stderr}`);
+  assert.equal(fs.existsSync(out), true);
+  assert.match(fs.readFileSync(out, 'utf8'), /TC-AUTH-001/);
+  assert.match(result.stdout, new RegExp(out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('export-testcases converts schema cases to CSV and markdown', () => {

@@ -18,17 +18,27 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.exit(0);
 }
 
-const formatFlag = process.argv.find((arg) => arg.startsWith('--format='));
-const formatArgIndex = process.argv.indexOf('--format');
-const format = formatFlag ? formatFlag.split('=')[1] : formatArgIndex !== -1 ? process.argv[formatArgIndex + 1] : 'json';
+const args = process.argv.slice(2);
+const formatFlag = args.find((arg) => arg.startsWith('--format='));
+const formatArgIndex = args.indexOf('--format');
+const formatValue =
+  formatFlag !== undefined
+    ? formatFlag.slice('--format='.length)
+    : formatArgIndex !== -1
+      ? args[formatArgIndex + 1]
+      : 'json';
+const missingFormatValue =
+  (formatFlag !== undefined && formatValue === '') ||
+  (formatArgIndex !== -1 && (!formatValue || formatValue.startsWith('--')));
+const format = formatValue;
 
-const inputArgs = process.argv.slice(2).filter((arg, i, all) => {
+const inputArgs = args.filter((arg, i, all) => {
   if (arg.startsWith('--')) return false;
   if (all[i - 1] === '--format') return false;
   return true;
 });
 
-if (inputArgs.length === 0) {
+if (inputArgs.length === 0 || missingFormatValue || !['json', 'md'].includes(format)) {
   usage();
   process.exit(2);
 }
@@ -45,6 +55,8 @@ const fileReports = [];
 const allErrors = [];
 const allWarnings = [];
 let totalCases = 0;
+
+if (files.length === 0) allErrors.push('no test case files found');
 
 for (const file of files) {
   const relFile = path.relative(process.cwd(), file);
@@ -67,7 +79,8 @@ for (const file of files) {
   const fileWarnings = [];
   cases.forEach((testCase, index) => {
     totalCases += 1;
-    const label = `${relFile}#${index}${testCase.id ? ` (${testCase.id})` : ''}`;
+    const id = testCase && typeof testCase === 'object' && typeof testCase.id === 'string' ? testCase.id : '';
+    const label = `${relFile}#${index}${id ? ` (${id})` : ''}`;
     const { errors, warnings } = validateCase(testCase);
     for (const error of errors) {
       fileErrors.push(`${label}: ${error}`);

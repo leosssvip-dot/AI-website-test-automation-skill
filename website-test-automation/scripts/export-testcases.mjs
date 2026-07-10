@@ -21,20 +21,37 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.exit(0);
 }
 
-const formatFlag = process.argv.find((arg) => arg.startsWith('--format='));
-const formatArgIndex = process.argv.indexOf('--format');
-const format = formatFlag ? formatFlag.split('=')[1] : formatArgIndex !== -1 ? process.argv[formatArgIndex + 1] : 'csv';
-const outFlag = process.argv.find((arg) => arg.startsWith('--out='));
-const outArgIndex = process.argv.indexOf('--out');
-const outPath = outFlag ? outFlag.split('=')[1] : outArgIndex !== -1 ? process.argv[outArgIndex + 1] : null;
+const args = process.argv.slice(2);
+const formatFlag = args.find((arg) => arg.startsWith('--format='));
+const formatArgIndex = args.indexOf('--format');
+const format =
+  formatFlag !== undefined
+    ? formatFlag.slice('--format='.length)
+    : formatArgIndex !== -1
+      ? args[formatArgIndex + 1]
+      : 'csv';
+const outFlag = args.find((arg) => arg.startsWith('--out='));
+const outArgIndex = args.indexOf('--out');
+const outPath =
+  outFlag !== undefined
+    ? outFlag.slice('--out='.length)
+    : outArgIndex !== -1
+      ? args[outArgIndex + 1]
+      : null;
+const missingFormatValue =
+  (formatFlag !== undefined && format === '') ||
+  (formatArgIndex !== -1 && (!format || format.startsWith('--')));
+const missingOutValue =
+  (outFlag !== undefined && outPath === '') ||
+  (outArgIndex !== -1 && (!outPath || outPath.startsWith('--')));
 
-const inputArgs = process.argv.slice(2).filter((arg, i, all) => {
+const inputArgs = args.filter((arg, i, all) => {
   if (arg.startsWith('--')) return false;
   if (all[i - 1] === '--format' || all[i - 1] === '--out') return false;
   return true;
 });
 
-if (inputArgs.length === 0 || !['csv', 'md'].includes(format)) {
+if (inputArgs.length === 0 || missingFormatValue || missingOutValue || !['csv', 'md'].includes(format)) {
   usage();
   process.exit(2);
 }
