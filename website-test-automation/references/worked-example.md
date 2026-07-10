@@ -88,6 +88,9 @@ Two representative cases (schema-complete; intended for `validate-testcases.mjs`
     code: ["src/app/api/projects/route.ts"]
     observed: []
   source_status: mismatch
+  surface: api
+  layer: api
+  disposition: automate-later
   mismatch: "The PRD requires persisted, account-scoped, unique projects, but POST only echoes a name and GET returns static data."
   human_expectation: "A created project is persisted and retrievable, not just echoed back."
   why_unreasonable: "Returning 201 for data that cannot be read back presents an incomplete write as successful."
@@ -128,6 +131,9 @@ Two representative cases (schema-complete; intended for `validate-testcases.mjs`
     code: ["src/app/projects/page.tsx"]
     observed: []
   source_status: mismatch
+  surface: web
+  layer: route
+  disposition: human-logic-risk
   mismatch: "PRD requires login before /projects, but the page renders with no auth guard."
   human_expectation: "Protected data should not render to a logged-out visitor."
   why_unreasonable: "Rendering a protected page without checking the session violates the documented access boundary."
@@ -164,7 +170,7 @@ Both cases are `mismatch` records with `automation.recommended: false`. Do not w
 | --- | --- | --- | --- | --- |
 | TC-PROJ-001 | automate-later | api | The handler reports creation without persistence or uniqueness | Decide and implement the write/read contract, then add the route test |
 | TC-AUTH-002 | human-logic-risk | route | Behavior contradicts the PRD; automating now would lock in a bug | Get a product decision, then cover |
-| edit / archive | risk-note/not-in-scope | — | Feature does not exist yet | Track as gap until built |
+| edit / archive | not-in-scope | — | Feature does not exist yet | Track as gap until built |
 
 ## Step 8 — Proposed Automation After the Product Decision
 

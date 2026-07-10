@@ -46,6 +46,9 @@ source:
   code: ["src/app/login/page.tsx", "src/server/auth.ts"]
   observed: []
 source_status: documented
+surface: web
+layer: browser-runner
+disposition: automate-now
 mismatch: ""
 human_expectation: "User expects a clear next step after login."
 why_unreasonable: ""

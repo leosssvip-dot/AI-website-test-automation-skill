@@ -121,6 +121,9 @@ function flattenCase(testCase) {
   return {
     'ID': text(testCase.id),
     'Title': text(testCase.title),
+    'Surface': text(testCase.surface),
+    'Layer': text(testCase.layer),
+    'Disposition': text(testCase.disposition),
     'Priority': text(testCase.priority),
     'Type': text(testCase.type),
     'Risk': text(testCase.risk),
@@ -156,7 +159,19 @@ function toCsv() {
 }
 
 function toMarkdown() {
-  const MD_COLUMNS = ['ID', 'Title', 'Priority', 'Type', 'Source Status', 'Automation Target', 'Steps', 'Expected Results'];
+  const MD_COLUMNS = [
+    'ID',
+    'Title',
+    'Surface',
+    'Layer',
+    'Disposition',
+    'Priority',
+    'Type',
+    'Source Status',
+    'Automation Target',
+    'Steps',
+    'Expected Results',
+  ];
   const cell = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', '<br>') || ' ';
   const lines = [
     `| ${MD_COLUMNS.join(' | ')} |`,

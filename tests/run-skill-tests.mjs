@@ -49,6 +49,9 @@ function validTestCase(overrides = {}) {
     title: 'Schema validation case',
     source: { docs: ['docs/PRD.md'], code: [], observed: [] },
     source_status: 'documented',
+    surface: 'api',
+    layer: 'api',
+    disposition: 'manual',
     mismatch: '',
     human_expectation: '',
     why_unreasonable: '',
@@ -80,6 +83,9 @@ function validYamlLines() {
     '  code: []',
     '  observed: []',
     'source_status: documented',
+    'surface: api',
+    'layer: api',
+    'disposition: manual',
     'type: api',
     'priority: P2',
     'steps: [Call endpoint]',
@@ -864,6 +870,124 @@ test('response-only test case template matches required schema fields', () => {
   }
 });
 
+test('canonical case routing fields are required, typed, and enum validated', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-routing-fields-'));
+  const file = path.join(dir, 'routing-fields.json');
+  const without = (field) => {
+    const testCase = validTestCase();
+    delete testCase[field];
+    return testCase;
+  };
+  fs.writeFileSync(
+    file,
+    JSON.stringify([
+      without('surface'),
+      without('layer'),
+      without('disposition'),
+      validTestCase({ surface: [] }),
+      validTestCase({ surface: 'desktop' }),
+      validTestCase({ layer: false }),
+      validTestCase({ layer: 'database' }),
+      validTestCase({ disposition: 42 }),
+      validTestCase({ disposition: 'ship-it' }),
+    ]),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', file]);
+  assert.equal(result.status, 1, `invalid routing fields must fail\n${result.stdout}\n${result.stderr}`);
+  const errors = JSON.parse(result.stdout).errors.join('\n');
+  for (const message of [
+    'missing required field: surface',
+    'missing required field: layer',
+    'missing required field: disposition',
+    'surface must be a string',
+    'invalid surface: "desktop"',
+    'layer must be a string',
+    'invalid layer: "database"',
+    'disposition must be a string',
+    'invalid disposition: "ship-it"',
+  ]) {
+    assert.match(errors, new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('canonical case routing rejects unresolved risk automation conflicts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-routing-conflicts-'));
+  const file = path.join(dir, 'routing-conflicts.json');
+  fs.writeFileSync(
+    file,
+    JSON.stringify([
+      validTestCase({ disposition: 'human-logic-risk', logic_risk: false }),
+      validTestCase({ disposition: 'exploratory', logic_risk: true, why_unreasonable: '' }),
+      validTestCase({
+        source_status: 'mismatch',
+        mismatch: 'Requirements and implementation disagree.',
+        disposition: 'automate-now',
+      }),
+      validTestCase({
+        source_status: 'mismatch',
+        mismatch: 'Requirements and implementation disagree.',
+        disposition: 'automate-later',
+        automation: { recommended: false, target: 'durable-regression', preferred_tools: [] },
+      }),
+      validTestCase({
+        logic_risk: true,
+        why_unreasonable: 'The current behavior is unsafe for users.',
+        disposition: 'automate-now',
+      }),
+      validTestCase({
+        logic_risk: true,
+        why_unreasonable: 'The current behavior is unsafe for users.',
+        disposition: 'exploratory',
+        automation: { recommended: false, target: 'durable-regression', preferred_tools: [] },
+      }),
+    ]),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', file]);
+  assert.equal(result.status, 1, `routing conflicts must fail\n${result.stdout}\n${result.stderr}`);
+  const errors = JSON.parse(result.stdout).errors.join('\n');
+  for (const message of [
+    'disposition human-logic-risk requires logic_risk: true',
+    'logic_risk true requires non-empty why_unreasonable',
+    'source_status mismatch cannot use disposition automate-now',
+    'source_status mismatch cannot use automation.target durable-regression',
+    'logic_risk true cannot use disposition automate-now',
+    'logic_risk true cannot use automation.target durable-regression',
+  ]) {
+    assert.match(errors, new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('canonical case routing fields stay aligned across case artifacts', () => {
+  const artifacts = [
+    'website-test-automation/assets/testcase-template.yaml',
+    'website-test-automation/references/testcase-schema.md',
+    'website-test-automation/references/test-case-authoring.md',
+    'website-test-automation/references/output-templates.md',
+    'docs/PRD.md',
+  ];
+  for (const rel of artifacts) {
+    const contents = read(rel);
+    for (const field of ['surface:', 'layer:', 'disposition:']) {
+      assert.match(contents, new RegExp(`^\\s*${field}`, 'm'), `${rel} must include ${field}`);
+    }
+  }
+
+  const workedExample = read('website-test-automation/references/worked-example.md');
+  for (const field of ['surface:', 'layer:', 'disposition:']) {
+    assert.equal((workedExample.match(new RegExp(`^\\s*${field}`, 'gm')) || []).length, 2, `${field} must persist on both worked-example cases`);
+  }
+
+  const routingReferences = [
+    workedExample,
+    read('website-test-automation/references/workflow.md'),
+    read('website-test-automation/references/scenario-workflows.md'),
+    read('website-test-automation/references/output-templates.md'),
+  ].join('\n');
+  assert.doesNotMatch(routingReferences, /`?(?:manual\/live|risk-note\/not-in-scope)`?/i);
+});
+
 test('response-only output template stays focused on target-repo QA output', () => {
   const outputTemplates = read('website-test-automation/references/output-templates.md');
   const responseOnly = outputTemplates.split('## Response-Only QA Package')[1].split('## Automation Handoff')[0];
@@ -935,14 +1059,22 @@ test('validate-testcases rejects invalid enums, missing fields, and weak cases',
   assert.equal(result.status, 1);
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.ok, false);
-  assert.equal(parsed.totalCases, 2);
+  assert.equal(parsed.totalCases, 5);
   const errors = parsed.errors.join('\n');
   assert.match(errors, /invalid priority: "P5"/);
   assert.match(errors, /invalid type: "smoke"/);
   assert.match(errors, /invalid source_status: "guessed"/);
+  assert.match(errors, /invalid surface: "desktop"/);
+  assert.match(errors, /invalid layer: "database"/);
+  assert.match(errors, /invalid disposition: "ship-it"/);
   assert.match(errors, /invalid automation\.target: "someday"/);
   assert.match(errors, /missing required field: id/);
+  assert.match(errors, /missing required field: disposition/);
   assert.match(errors, /P0 case needs at least one source evidence/);
+  assert.match(errors, /disposition human-logic-risk requires logic_risk: true/);
+  assert.match(errors, /logic_risk true requires non-empty why_unreasonable/);
+  assert.match(errors, /source_status mismatch cannot use disposition automate-now/);
+  assert.match(errors, /source_status mismatch cannot use automation\.target durable-regression/);
   assert.match(parsed.warnings.join('\n'), /too vague \("works"\)/);
 });
 
@@ -958,6 +1090,9 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
       '  code: []',
       '  observed: []',
       'source_status: documented',
+      'surface: api',
+      'layer: api',
+      'disposition: manual',
       'type: api',
       'priority: P0',
       'steps:',
@@ -975,6 +1110,9 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
       '  code: ["src/x.ts"]',
       '  observed: []',
       'source_status: inferred',
+      'surface: web',
+      'layer: component',
+      'disposition: manual',
       'type: component',
       'priority: P2',
       'steps:',
@@ -998,6 +1136,9 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
         title: 'Json case',
         source: { docs: ['docs/PRD.md'], code: [], observed: [] },
         source_status: 'documented',
+        surface: 'web',
+        layer: 'browser-runner',
+        disposition: 'manual',
         type: 'e2e',
         priority: 'P1',
         steps: ['open'],
@@ -1206,6 +1347,9 @@ test('validate-testcases rejects unsafe keys, broken quotes, and malformed flow 
     '  code: []',
     '  observed: []',
     'source_status: documented',
+    'surface: api',
+    'layer: api',
+    'disposition: manual',
     'type: api',
     'priority: P2',
     'steps: [Call endpoint]',
@@ -1280,6 +1424,9 @@ test('validate-testcases preserves quotes and apostrophes inside plain YAML scal
       '  code: []',
       '  observed: []',
       'source_status: documented',
+      'surface: web',
+      'layer: browser-runner',
+      'disposition: manual',
       'type: e2e',
       'priority: P2',
       "steps: [Open user's profile]",
@@ -1483,7 +1630,7 @@ test('test-case CLIs accept dash-prefixed input paths after the option terminato
 
   const exported = runRaw('node', [exportScript, '--format=md', '--', inputName], { cwd: dir });
   assert.equal(exported.status, 0, `terminator export failed\n${exported.stdout}\n${exported.stderr}`);
-  assert.match(exported.stdout, /^\| ID \| Title \| Priority \|/);
+  assert.match(exported.stdout, /^\| ID \| Title \| Surface \| Layer \| Disposition \| Priority \|/);
 });
 
 test('export-testcases preserves equals signs in --out=<path> values', () => {
@@ -1509,8 +1656,9 @@ test('export-testcases converts schema cases to CSV and markdown', () => {
     'csv',
   ]);
   const lines = csv.split('\n');
-  assert.match(lines[0], /^"ID","Title","Priority","Type"/);
+  assert.match(lines[0], /^"ID","Title","Surface","Layer","Disposition","Priority","Type"/);
   assert.match(csv, /TC-AUTH-001/);
+  assert.match(csv, /"web","browser-runner","automate-now"/);
   assert.match(csv, /"1\. Open login page\n2\. Enter valid credentials\n3\. Submit form"/);
 
   const md = run('node', [
@@ -1519,8 +1667,9 @@ test('export-testcases converts schema cases to CSV and markdown', () => {
     '--format',
     'md',
   ]);
-  assert.match(md, /^\| ID \| Title \| Priority \|/);
+  assert.match(md, /^\| ID \| Title \| Surface \| Layer \| Disposition \| Priority \|/);
   assert.match(md, /TC-AUTH-001/);
+  assert.match(md, /\| web \| browser-runner \| automate-now \|/);
   assert.match(md, /<br>/);
 
   // Edge cases: bracket-prefixed plain scalars survive intact, formula-leading
@@ -1536,6 +1685,9 @@ test('export-testcases converts schema cases to CSV and markdown', () => {
       '  code: []',
       '  observed: []',
       'source_status: documented',
+      'surface: web',
+      'layer: browser-runner',
+      'disposition: manual',
       'type: e2e',
       'priority: P2',
       'steps:',

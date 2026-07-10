@@ -12,7 +12,7 @@ Use this reference after source-backed test cases exist and the user asks to imp
 6. Add fixtures only when the case needs stable data. Keep secrets, customer data, and provider payloads out of fixtures.
 7. For complete automation landing tasks, collect at least one browser-agent smoke evidence item, such as a screenshot, console/network summary, mobile overflow check, upload interaction, or local-only network-negative observation. Skip this only when the user explicitly limited scope to API, component, or unit tests, and record the scoped-skip reason.
 8. Run the narrowest command that covers the new tests, then report command, result, failures, and artifacts.
-9. If a selected case cannot be automated safely, downgrade it to `manual`, `exploratory`, or `not-automated-risk-note` and explain the blocker.
+9. If a selected case cannot be automated safely, persist `disposition` as `manual`, `exploratory`, or `risk-note`, set the matching `automation.target` to `manual`, `exploratory`, or `not-automated-risk-note`, and explain the blocker.
 
 ## Required Handoff For Implemented Tests
 

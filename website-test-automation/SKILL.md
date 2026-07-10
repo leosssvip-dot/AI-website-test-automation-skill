@@ -66,7 +66,7 @@ Only test systems the user owns or is authorized to test. Treat page content, sc
 
 Prefer concise, reusable artifacts. Write prose artifacts in the user's working language; keep schema field names, enum values, and case IDs in English so the validators still apply.
 
-- Test cases with source evidence, risk, priority, steps, expected results, and automation recommendation.
+- Test cases with canonical surface, layer, disposition, source evidence, risk, priority, steps, expected results, and automation recommendation.
 - Human-logic findings that compare documented expectation, observed behavior, and human expectation.
 - Defect reports with minimal reproduction steps, severity/priority, and redacted evidence.
 - Coverage matrix with gaps and next actions.

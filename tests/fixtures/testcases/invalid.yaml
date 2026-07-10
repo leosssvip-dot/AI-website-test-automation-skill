@@ -5,6 +5,9 @@
     code: []
     observed: []
   source_status: guessed
+  surface: desktop
+  layer: database
+  disposition: ship-it
   type: smoke
   priority: P5
   steps:
@@ -20,6 +23,8 @@
     code: []
     observed: []
   source_status: documented
+  surface: web
+  layer: browser-runner
   type: e2e
   priority: P0
   steps: []
@@ -28,3 +33,59 @@
   automation:
     recommended: false
     target: manual
+- id: TC-BAD-003
+  title: Human logic disposition without a logic risk
+  source:
+    docs: ["docs/PRD.md"]
+    code: []
+    observed: []
+  source_status: documented
+  surface: web
+  layer: browser-agent
+  disposition: human-logic-risk
+  logic_risk: false
+  type: exploratory
+  priority: P2
+  steps: [Review the workflow]
+  expected: [The risk is classified consistently]
+  automation:
+    recommended: false
+    target: exploratory
+- id: TC-BAD-004
+  title: Logic risk without an explanation
+  source:
+    docs: ["docs/PRD.md"]
+    code: []
+    observed: []
+  source_status: documented
+  surface: web
+  layer: browser-agent
+  disposition: exploratory
+  why_unreasonable: ""
+  logic_risk: true
+  type: exploratory
+  priority: P2
+  steps: [Review the workflow]
+  expected: [The risk has an explanation]
+  automation:
+    recommended: false
+    target: exploratory
+- id: TC-BAD-005
+  title: Unresolved mismatch selected for durable automation
+  source:
+    docs: ["docs/PRD.md"]
+    code: ["src/feature.ts"]
+    observed: []
+  source_status: mismatch
+  surface: api
+  layer: api
+  disposition: automate-now
+  mismatch: "Requirements and implementation disagree."
+  logic_risk: false
+  type: api
+  priority: P2
+  steps: [Call the endpoint]
+  expected: [The decided contract is returned]
+  automation:
+    recommended: true
+    target: durable-regression

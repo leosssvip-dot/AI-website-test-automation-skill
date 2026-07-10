@@ -20,7 +20,7 @@ Use this workflow for website QA planning, test case generation, automation, and
 4. Decide whether Graphify, CodeGraph, plain `rg`, or repo-native commands are appropriate.
 5. Generate a coverage matrix by product area, workflow, risk, test layer, source evidence, and automation feasibility.
 6. Write test cases using the schema and quality rubric.
-7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](scenario-workflows.md): assign every case to automate-now, automate-later, browser-smoke, manual/live, exploratory, human-logic-risk, or risk-note/not-in-scope.
+7. Run the Post-Test-Case Disposition Gate from [scenario-workflows.md](scenario-workflows.md): persist every case as automate-now, automate-later, browser-smoke, manual, provider-live, exploratory, human-logic-risk, risk-note, or not-in-scope.
 8. Select automation targets: durable regression, browser-agent smoke, exploratory, manual, API/component, human-logic risk, or risk note.
 9. Execute through the best available adapter or project runner.
 10. Report case disposition, evidence, gaps, flaky risks, and next cases.

@@ -81,6 +81,9 @@ Use this when the user asked for review, planning, or agent-style output without
     code: []
     observed: []
   source_status: documented
+  surface: web
+  layer: browser-runner
+  disposition: automate-now
   mismatch: ""
   human_expectation: ""
   why_unreasonable: ""
@@ -110,14 +113,17 @@ Use this when the user asked for review, planning, or agent-style output without
 - Durable regression:
 - Browser-agent smoke:
 - API/component:
-- Manual/live:
+- Manual/provider-live:
 - Exploratory:
 - Not automated yet:
 
 ## Case Disposition
+
+The root `disposition` field on each test case is canonical; this table is a derived review view.
+
 | Case ID | Disposition | Layer | Why now / why not now | Next action |
 | --- | --- | --- | --- | --- |
-|  | automate-now / automate-later / browser-smoke / manual/live / exploratory / human-logic-risk / risk-note/not-in-scope |  |  |  |
+|  | automate-now / automate-later / browser-smoke / manual / provider-live / exploratory / human-logic-risk / risk-note / not-in-scope |  |  |  |
 
 ## Browser Adapter Choice
 - Existing project stack first:
@@ -187,7 +193,7 @@ Use this only when the user is reviewing or improving this skill package itself,
 - Browser-agent smoke evidence:
 - Failure artifacts:
 - Remaining gaps:
-- Manual/live cases:
+- Manual/provider-live cases:
 ```
 
 ## Failure Triage

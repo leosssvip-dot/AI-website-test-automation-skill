@@ -12,6 +12,32 @@ export const ENUMS = Object.freeze({
     'exploratory',
   ]),
   source_status: Object.freeze(['documented', 'inferred', 'observed', 'mismatch']),
+  surface: Object.freeze(['web', 'api', 'job', 'cli', 'library']),
+  layer: Object.freeze([
+    'unit',
+    'component',
+    'api',
+    'route',
+    'integration',
+    'browser-runner',
+    'browser-agent',
+    'visual',
+    'accessibility',
+    'performance-smoke',
+    'security-smoke',
+    'manual',
+  ]),
+  disposition: Object.freeze([
+    'automate-now',
+    'automate-later',
+    'browser-smoke',
+    'manual',
+    'provider-live',
+    'exploratory',
+    'human-logic-risk',
+    'risk-note',
+    'not-in-scope',
+  ]),
   'automation.target': Object.freeze([
     'durable-regression',
     'browser-agent-smoke',
@@ -27,6 +53,9 @@ export const CORE_FIELDS = Object.freeze([
   'title',
   'source',
   'source_status',
+  'surface',
+  'layer',
+  'disposition',
   'type',
   'priority',
   'steps',
@@ -39,6 +68,9 @@ export const SCHEMA_FIELDS = Object.freeze([
   'title',
   'source',
   'source_status',
+  'surface',
+  'layer',
+  'disposition',
   'mismatch',
   'human_expectation',
   'why_unreasonable',
@@ -63,6 +95,9 @@ const STRING_FIELDS = [
   'id',
   'title',
   'source_status',
+  'surface',
+  'layer',
+  'disposition',
   'type',
   'priority',
   'mismatch',
@@ -146,7 +181,7 @@ export function validateCase(testCase) {
     errors.push('evidence.required must be an array of strings');
   }
 
-  for (const field of ['priority', 'type', 'source_status']) {
+  for (const field of ['priority', 'type', 'source_status', 'surface', 'layer', 'disposition']) {
     if (hasOwn(testCase, field) && !ENUMS[field].includes(testCase[field])) {
       errors.push(`invalid ${field}: "${testCase[field]}" (allowed: ${ENUMS[field].join(', ')})`);
     }
@@ -159,6 +194,27 @@ export function validateCase(testCase) {
     errors.push(
       `invalid automation.target: "${testCase.automation.target}" (allowed: ${ENUMS['automation.target'].join(', ')})`,
     );
+  }
+
+  const disposition = hasOwn(testCase, 'disposition') ? testCase.disposition : undefined;
+  const automationTarget = isPlainObject(testCase.automation) ? testCase.automation.target : undefined;
+  if (disposition === 'human-logic-risk' && testCase.logic_risk !== true) {
+    errors.push('disposition human-logic-risk requires logic_risk: true');
+  }
+  if (testCase.logic_risk === true && !hasNonEmptyText(testCase.why_unreasonable)) {
+    errors.push('logic_risk true requires non-empty why_unreasonable');
+  }
+  if (testCase.source_status === 'mismatch' && disposition === 'automate-now') {
+    errors.push('source_status mismatch cannot use disposition automate-now');
+  }
+  if (testCase.source_status === 'mismatch' && automationTarget === 'durable-regression') {
+    errors.push('source_status mismatch cannot use automation.target durable-regression');
+  }
+  if (testCase.logic_risk === true && disposition === 'automate-now') {
+    errors.push('logic_risk true cannot use disposition automate-now');
+  }
+  if (testCase.logic_risk === true && automationTarget === 'durable-regression') {
+    errors.push('logic_risk true cannot use automation.target durable-regression');
   }
 
   const priority = hasOwn(testCase, 'priority') ? testCase.priority : undefined;
@@ -175,9 +231,6 @@ export function validateCase(testCase) {
 
   if (testCase.source_status === 'mismatch') {
     if (!testCase.mismatch) warnings.push('source_status is mismatch but mismatch field is empty');
-    if (isPlainObject(testCase.automation) && testCase.automation.target === 'durable-regression') {
-      warnings.push('mismatch case recommends durable-regression; keep it manual/exploratory until the expectation is decided');
-    }
   }
 
   if (
@@ -192,10 +245,6 @@ export function validateCase(testCase) {
   }
   if (Array.isArray(testCase.expected) && testCase.expected.length === 0) {
     warnings.push('expected is empty; add a deterministic expected result');
-  }
-
-  if (testCase.logic_risk === true && !testCase.why_unreasonable) {
-    warnings.push('logic_risk is true but why_unreasonable is empty');
   }
 
   if (

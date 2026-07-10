@@ -152,6 +152,9 @@ source:
     - src/app/login/page.tsx
     - src/server/auth.ts
 source_status: documented
+surface: web
+layer: browser-runner
+disposition: automate-now
 type: e2e
 priority: P0
 risk: auth/session

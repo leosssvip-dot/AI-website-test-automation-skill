@@ -5,6 +5,9 @@ source:
   code: []
   observed: []
 source_status: documented
+surface: web
+layer: browser-runner
+disposition: manual
 mismatch: ""
 human_expectation: ""
 why_unreasonable: ""
