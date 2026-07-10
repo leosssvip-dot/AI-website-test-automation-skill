@@ -3,10 +3,10 @@
 ## Current Execution State
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- Active task: [docs/tasks/2026-06-10-tester-experience-improvements.md](tasks/2026-06-10-tester-experience-improvements.md)
-- Task status: Done
+- Active task: [docs/tasks/2026-07-10-systematic-skill-hardening.md](tasks/2026-07-10-systematic-skill-hardening.md)
+- Task status: In Progress
 - Current blocker: None
-- Next step: Forward-test the broadened skill on 2-3 real projects (simple site, authenticated CRUD app, flaky suite) and bundle sanitized case studies to unlock the 90+ readiness band and validate the new black-box/defect/export paths.
+- Next step: Execute the five TDD hardening slices in `docs/plans/2026-07-10-skill-hardening-implementation.md`, then forward-test on a fresh fixture whose answer is not embedded in the skill.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
