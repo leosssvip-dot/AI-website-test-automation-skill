@@ -37,7 +37,7 @@ The skill must inspect product intent, target users, workflows, business entitie
 
 ### FR-2: Test Case Authoring Core
 
-The skill must treat test case writing as the primary workflow. Generated cases must include ID, title, source evidence, type, priority, risk, persona, preconditions, steps, expected results, negative cases, data needs, automation recommendation, and evidence expectations.
+The skill must treat test case writing as the primary workflow. Generated cases must include ID, title, source evidence, surface, layer, disposition, type, priority, risk, persona, preconditions, steps, expected results, negative cases, data needs, automation recommendation, and evidence expectations.
 
 ### FR-3: Multi-Source Input
 

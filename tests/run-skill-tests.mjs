@@ -974,6 +974,13 @@ test('canonical case routing fields stay aligned across case artifacts', () => {
     }
   }
 
+  const prd = read('docs/PRD.md');
+  const fr2 = prd.match(/### FR-2: Test Case Authoring Core\n([\s\S]*?)(?=\n### )/)?.[1] || '';
+  assert.notEqual(fr2, '', 'docs/PRD.md must keep the FR-2 required-field contract');
+  for (const field of ['surface', 'layer', 'disposition']) {
+    assert.match(fr2, new RegExp(`\\b${field}\\b`, 'i'), `FR-2 must require ${field}`);
+  }
+
   const workedExample = read('website-test-automation/references/worked-example.md');
   for (const field of ['surface:', 'layer:', 'disposition:']) {
     assert.equal((workedExample.match(new RegExp(`^\\s*${field}`, 'gm')) || []).length, 2, `${field} must persist on both worked-example cases`);
