@@ -73,12 +73,12 @@ The PRD and the code disagree. Do not flatten these into assumptions; carry them
 | Product area | Workflow | Risk | Source evidence | Source status | Layer | Priority | Current coverage | Gap / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | auth/session | guard `/projects` | unauthorized access | PRD; `projects/page.tsx` | mismatch | route/middleware | P0 | none | Decide guard; add route test once behavior is set |
-| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired, failing) | Decide persistence/uniqueness, implement, then add API tests |
+| projects | create project | data integrity | PRD; `api/projects/route.ts` | mismatch | api | P0 | `projects.spec.ts` (unwired; runtime status not verified) | Decide persistence/uniqueness, implement, then add API tests |
 | projects | edit / archive | missing capability | PRD | documented | api/e2e | P1 | none | Build feature, then cover |
 
 ## Step 6 — Source-Backed Cases
 
-Two representative cases (schema-complete; intended for `validate-testcases.mjs`). Both carry unresolved mismatches and are not safe to turn into passing durable regressions yet.
+Two representative cases (schema-complete; intended for `validate-testcases.mjs`). Both carry unresolved mismatches and are not safe to turn into durable regression automation yet.
 
 ```yaml
 - id: TC-PROJ-001
@@ -192,11 +192,11 @@ describe("POST /api/projects (TC-PROJ-001)", () => {
 });
 ```
 
-After the product change lands, run `npx vitest run tests/api/projects-route.test.ts` and capture the actual result. This walkthrough records neither an execution result nor a passing test.
+After the product change lands, run `npx vitest run tests/api/projects-route.test.ts` and capture the actual command output. This walkthrough contains no execution evidence and no completed automated test.
 
 ## Step 9 — Triage the Existing Test
 
-`tests/projects.spec.ts` drives `/projects/new`, fills the name, clicks Create, and asserts the new name is visible. But `new/page.tsx` has a bare `<form>` with no submit handler — nothing renders the result. Per [flake-triage.md](flake-triage.md), this is **product regression / not-yet-implemented**, not a flake: do not "fix" it by loosening the assertion or adding a wait. Convert it to a pending case tied to the create-flow gap, and flag the unwired form.
+`tests/projects.spec.ts` is written to drive `/projects/new`, fill the name, click Create, and assert the new name is visible. Source inspection shows that `new/page.tsx` has a bare `<form>` with no submit handler or post-submit output state. Per [flake-triage.md](flake-triage.md), record this as a **source-visible implementation gap pending runtime verification**: do not label it a flake, loosen the assertion, or add a wait without execution evidence. Convert it to a pending case tied to the create-flow gap, and flag the unwired form.
 
 ## Output the Agent Should Produce
 

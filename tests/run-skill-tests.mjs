@@ -397,6 +397,8 @@ test('worked example is an honest source-repository planning walkthrough', () =>
   ]) {
     assert.doesNotMatch(workedExample, unsupportedClaim);
   }
+  assert.match(workedExample, /projects\.spec\.ts` \(unwired; runtime status not verified\)/i);
+  assert.doesNotMatch(workedExample, /\b(?:failing|passing|passed|failed|results?)\b/i);
 
   const projectCase = workedExample.split('- id: TC-PROJ-001')[1]?.split('- id: TC-AUTH-002')[0] || '';
   assert.match(projectCase, /source_status:\s*mismatch/);
@@ -407,10 +409,27 @@ test('worked example is an honest source-repository planning walkthrough', () =>
   assert.match(workedExample, /\|\s*TC-PROJ-001\s*\|\s*automate-later\s*\|/);
 
   const authCase = workedExample.split('- id: TC-AUTH-002')[1]?.split('```')[0] || '';
-  const authDisposition = workedExample.match(/\|\s*TC-AUTH-002\s*\|([^\n]+)/)?.[1] || '';
-  if (/human-logic-risk/i.test(authDisposition)) assert.match(authCase, /logic_risk:\s*true/);
+  const authDisposition = workedExample.match(/\|\s*TC-AUTH-002\s*\|\s*([^|]+)\|/)?.[1]?.trim() || '';
+  assert.equal(authDisposition, 'human-logic-risk');
+  assert.match(authCase, /logic_risk:\s*true/);
 
-  assert.match(workedExample, /from\s+["']\.\.\/\.\.\/src\/app\/api\/projects\/route["']/);
+  const stepEightStart = workedExample.indexOf('## Step 8');
+  const codeFenceStart = workedExample.indexOf('```ts\n', stepEightStart);
+  const proposedTestStart = codeFenceStart + '```ts\n'.length;
+  const proposedTestEnd = workedExample.indexOf('\n```', proposedTestStart);
+  assert.notEqual(stepEightStart, -1);
+  assert.equal(codeFenceStart > stepEightStart, true);
+  assert.equal(proposedTestEnd > proposedTestStart, true);
+  const proposedTest = workedExample.slice(proposedTestStart, proposedTestEnd);
+  assert.match(
+    proposedTest,
+    /^import\s*\{\s*GET\s*,\s*POST\s*\}\s*from\s*["']\.\.\/\.\.\/src\/app\/api\/projects\/route["']/m,
+  );
+  assert.match(proposedTest, /const\s+list\s*=\s*await\s+GET\s*\(\s*\)/);
+  assert.match(
+    proposedTest,
+    /expect\(\s*await\s+list\.json\(\)\s*\)\.toEqual\([\s\S]*expect\.arrayContaining\(\[[\s\S]*expect\.objectContaining\(\{\s*name\s*\}\)/,
+  );
 });
 
 test('design-source adapters cover common product and design artifact modes', () => {
