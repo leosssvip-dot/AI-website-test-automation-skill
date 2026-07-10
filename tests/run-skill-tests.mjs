@@ -1421,6 +1421,161 @@ test('detect-web-test-stack recognizes WebdriverIO packages and config', () => {
   assert.equal(result.browserTools.includes('webdriverio'), true);
 });
 
+test('detect-web-test-stack aggregates safe workspace packages without overwriting scripts', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-stack-'));
+  fs.mkdirSync(path.join(fixture, 'apps', 'web'), { recursive: true });
+  fs.mkdirSync(path.join(fixture, 'apps', 'api'), { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture, 'package.json'),
+    JSON.stringify({
+      name: 'workspace-root',
+      packageManager: 'pnpm@9.7.0',
+      workspaces: ['apps/*'],
+      scripts: { test: 'vitest run --root' },
+      devDependencies: { vitest: '2.0.0' },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'apps', 'web', 'package.json'),
+    JSON.stringify({
+      name: 'web-app',
+      scripts: { test: 'vitest run', 'test:e2e': 'playwright test' },
+      dependencies: { next: '15.0.0', react: '19.0.0' },
+      devDependencies: { '@playwright/test': '1.50.0', vitest: '2.0.0' },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'apps', 'api', 'package.json'),
+    JSON.stringify({
+      name: 'api-service',
+      scripts: { test: 'jest --runInBand' },
+      dependencies: { express: '5.0.0' },
+      devDependencies: { jest: '30.0.0' },
+    }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', fixture]);
+  assert.equal(result.packageManager, 'pnpm');
+  assert.equal(result.packageJsonStatus, 'parsed');
+  assert.equal(result.hasPackageJson, true);
+  assert.deepEqual(result.frameworks.sort(), ['express', 'nextjs', 'react']);
+  assert.deepEqual(result.testFrameworks.sort(), ['jest', 'playwright', 'vitest']);
+  assert.deepEqual(result.browserTools, ['playwright-runner']);
+  assert.equal(result.scripts.test, 'vitest run --root');
+  assert.equal(result.scriptsByPackage['.'].test, 'vitest run --root');
+  assert.equal(result.scriptsByPackage['apps/api'].test, 'jest --runInBand');
+  assert.equal(result.scriptsByPackage['apps/web'].test, 'vitest run');
+  assert.deepEqual(result.packages.map((entry) => entry.path), ['.', 'apps/api', 'apps/web']);
+  assert.deepEqual(result.packages.map((entry) => entry.packageJsonStatus), ['parsed', 'parsed', 'parsed']);
+  assert.equal(result.workspace.detected, true);
+  assert.deepEqual(result.workspace.patterns, ['apps/*']);
+  assert.equal(result.workspace.packageCount, 2);
+});
+
+test('detect-web-test-stack supports object and pnpm workspace declarations', () => {
+  const objectFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-object-stack-'));
+  fs.mkdirSync(path.join(objectFixture, 'packages', 'ui'), { recursive: true });
+  fs.writeFileSync(
+    path.join(objectFixture, 'package.json'),
+    JSON.stringify({ workspaces: { packages: ['packages/*'] } }),
+  );
+  fs.writeFileSync(
+    path.join(objectFixture, 'packages', 'ui', 'package.json'),
+    JSON.stringify({ name: 'ui', dependencies: { vue: '3.0.0' }, devDependencies: { cypress: '14.0.0' } }),
+  );
+  const objectResult = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', objectFixture]);
+  assert.equal(objectResult.workspace.detected, true);
+  assert.deepEqual(objectResult.workspace.patterns, ['packages/*']);
+  assert.equal(objectResult.frameworks.includes('vue'), true);
+  assert.equal(objectResult.testFrameworks.includes('cypress'), true);
+
+  const pnpmFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-pnpm-stack-'));
+  fs.mkdirSync(path.join(pnpmFixture, 'modules', 'tool'), { recursive: true });
+  fs.writeFileSync(path.join(pnpmFixture, 'package.json'), JSON.stringify({ name: 'pnpm-root' }));
+  fs.writeFileSync(
+    path.join(pnpmFixture, 'pnpm-workspace.yaml'),
+    ['packages:', "  - 'modules/*'", '  - "ignored/**" # harmless missing pattern'].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(pnpmFixture, 'modules', 'tool', 'package.json'),
+    JSON.stringify({ name: 'tool', dependencies: { svelte: '5.0.0' }, devDependencies: { vitest: '2.0.0' } }),
+  );
+  const pnpmResult = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', pnpmFixture]);
+  assert.equal(pnpmResult.packageManager, 'pnpm');
+  assert.deepEqual(pnpmResult.workspace.patterns, ['ignored/**', 'modules/*']);
+  assert.equal(pnpmResult.packages.some((entry) => entry.path === 'modules/tool'), true);
+  assert.equal(pnpmResult.frameworks.includes('svelte'), true);
+  assert.equal(pnpmResult.testFrameworks.includes('vitest'), true);
+});
+
+test('detect-web-test-stack distinguishes malformed package files and continues workspaces', () => {
+  const malformedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'malformed-root-stack-'));
+  fs.writeFileSync(path.join(malformedRoot, 'package.json'), '{');
+  const rootResult = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', malformedRoot]);
+  assert.equal(rootResult.hasPackageJson, true);
+  assert.equal(rootResult.packageJsonStatus, 'malformed');
+  assert.match(rootResult.confidenceNotes.join('\n'), /Malformed package\.json: package\.json/);
+  assert.doesNotMatch(rootResult.confidenceNotes.join('\n'), /No package\.json found/);
+
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'malformed-child-stack-'));
+  fs.mkdirSync(path.join(fixture, 'apps', 'broken'), { recursive: true });
+  fs.mkdirSync(path.join(fixture, 'apps', 'good'), { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
+  fs.writeFileSync(path.join(fixture, 'apps', 'broken', 'package.json'), '{');
+  fs.writeFileSync(
+    path.join(fixture, 'apps', 'good', 'package.json'),
+    JSON.stringify({ name: 'good', dependencies: { nuxt: '4.0.0' }, devDependencies: { vitest: '2.0.0' } }),
+  );
+  const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', fixture]);
+  assert.equal(result.packages.find((entry) => entry.path === 'apps/broken')?.packageJsonStatus, 'malformed');
+  assert.equal(result.packages.find((entry) => entry.path === 'apps/good')?.packageJsonStatus, 'parsed');
+  assert.equal(result.frameworks.includes('nuxt'), true);
+  assert.equal(result.testFrameworks.includes('vitest'), true);
+  assert.match(result.confidenceNotes.join('\n'), /Malformed package\.json: apps\/broken\/package\.json/);
+});
+
+test('detect-web-test-stack rejects package, workspace, config, and lock symlink escapes', () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'stack-outside-'));
+  fs.writeFileSync(
+    path.join(outside, 'package.json'),
+    JSON.stringify({ packageManager: 'pnpm@9', dependencies: { next: '15.0.0' }, devDependencies: { '@playwright/test': '1.50.0' } }),
+  );
+  fs.writeFileSync(path.join(outside, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+  fs.writeFileSync(path.join(outside, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+  fs.writeFileSync(path.join(outside, 'playwright.config.ts'), 'export default {};\n');
+
+  const rootLinkFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'stack-root-link-'));
+  fs.symlinkSync(path.join(outside, 'package.json'), path.join(rootLinkFixture, 'package.json'));
+  fs.symlinkSync(path.join(outside, 'pnpm-workspace.yaml'), path.join(rootLinkFixture, 'pnpm-workspace.yaml'));
+  const rootLinkResult = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', rootLinkFixture]);
+  assert.equal(rootLinkResult.hasPackageJson, true);
+  assert.equal(rootLinkResult.packageJsonStatus, 'symlink-rejected');
+  assert.equal(rootLinkResult.workspace.detected, false);
+  assert.deepEqual(rootLinkResult.frameworks, []);
+  assert.deepEqual(rootLinkResult.testFrameworks, []);
+
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'stack-workspace-links-'));
+  fs.mkdirSync(path.join(fixture, 'apps', 'bad'), { recursive: true });
+  fs.mkdirSync(path.join(fixture, 'apps', 'good'), { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
+  fs.symlinkSync(outside, path.join(fixture, 'apps', 'escape'));
+  fs.symlinkSync(path.join(outside, 'package.json'), path.join(fixture, 'apps', 'bad', 'package.json'));
+  fs.writeFileSync(
+    path.join(fixture, 'apps', 'good', 'package.json'),
+    JSON.stringify({ name: 'good', dependencies: { express: '5.0.0' } }),
+  );
+  fs.symlinkSync(path.join(outside, 'playwright.config.ts'), path.join(fixture, 'apps', 'good', 'playwright.config.ts'));
+  fs.symlinkSync(path.join(outside, 'pnpm-lock.yaml'), path.join(fixture, 'pnpm-lock.yaml'));
+
+  const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', fixture]);
+  assert.equal(result.packageManager, 'unknown');
+  assert.equal(result.packages.some((entry) => entry.path === 'apps/escape'), false);
+  assert.equal(result.packages.find((entry) => entry.path === 'apps/bad')?.packageJsonStatus, 'symlink-rejected');
+  assert.deepEqual(result.frameworks, ['express']);
+  assert.deepEqual(result.browserTools, []);
+  assert.match(result.confidenceNotes.join('\n'), /symlink/i);
+});
+
 test('route-inventory discovers static and Next.js routes', () => {
   const simple = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', 'tests/fixtures/simple-site']);
   assert.equal(simple.routes.some((route) => route.route === '/'), true);
