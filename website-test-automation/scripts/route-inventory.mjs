@@ -265,9 +265,48 @@ const toApiRoutePath = (raw) => {
   return nested === '/' ? '/api' : `/api${nested}`;
 };
 const toPagesRoutePath = (raw) => toRoutePath(raw.replace(/(^|\/)index$/, ''));
+const projectRootCache = new Map();
+
+function hasSafePackageBoundary(directory) {
+  const manifest = path.join(directory, 'package.json');
+  try {
+    const stats = fs.lstatSync(manifest);
+    if (stats.isSymbolicLink()) {
+      addNote(`Skipped package boundary symlink: ${relativePath(manifest)}`);
+      return false;
+    }
+    return stats.isFile() && isContained(fs.realpathSync(manifest));
+  } catch {
+    return false;
+  }
+}
+
+function findProjectRoot(file) {
+  let directory = path.dirname(file);
+  const visited = [];
+  let projectRoot = root;
+  while (isContained(directory)) {
+    if (projectRootCache.has(directory)) {
+      projectRoot = projectRootCache.get(directory);
+      break;
+    }
+    visited.push(directory);
+    if (directory === root || hasSafePackageBoundary(directory)) {
+      projectRoot = directory;
+      break;
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  for (const visitedDirectory of visited) projectRootCache.set(visitedDirectory, projectRoot);
+  return projectRoot;
+}
 
 for (const file of routeFiles) {
   const rel = path.relative(root, file).replaceAll(path.sep, '/');
+  const projectRoot = findProjectRoot(file);
+  const projectRel = path.relative(projectRoot, file).replaceAll(path.sep, '/');
   const content = readRouteSource(file);
   if (content === null) continue;
   const uncommented = sanitizeJavaScript(content);
@@ -278,14 +317,14 @@ for (const file of routeFiles) {
     add('static-html-route', '/' + raw, file, 'medium');
   }
 
-  if (/^(src\/)?app\/(?:.*\/)?page\.(tsx?|jsx?)$/.test(rel)) {
-    const raw = rel.replace(/^(src\/)?app\//, '').replace(/\/?page\.(tsx?|jsx?)$/, '');
-    add('next-app-route', toRoutePath(raw), file, 'high');
+  const appPageMatch = projectRel.match(/^(?:src\/)?app\/(.*?)\/?page\.(tsx?|jsx?)$/);
+  if (appPageMatch) {
+    add('next-app-route', toRoutePath(appPageMatch[1]), file, 'high');
   }
 
-  const appApiMatch = rel.match(/^(src\/)?app\/api(?:\/(.*))?\/route\.(tsx?|jsx?)$/);
+  const appApiMatch = projectRel.match(/^(?:src\/)?app\/api(?:\/(.*))?\/route\.(tsx?|jsx?)$/);
   if (appApiMatch) {
-    const raw = appApiMatch[2] || '';
+    const raw = appApiMatch[1] || '';
     const foundMethods = new Set([
       ...methodSource.matchAll(/\bexport\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g),
       ...methodSource.matchAll(/\bexport\s+const\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*=\s*(?=(?:async\s+)?(?:function\b|\([^;\n]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>))/g),
@@ -295,14 +334,15 @@ for (const file of routeFiles) {
     add('next-app-api-route', `${methodPrefix}${toApiRoutePath(raw)}`, file, 'high');
   }
 
-  if (/^(src\/)?pages\/.*\.(tsx?|jsx?)$/.test(rel) && !rel.includes('/_app.') && !rel.includes('/_document.')) {
-    const raw = rel.replace(/^(src\/)?pages\//, '').replace(/\.(tsx?|jsx?)$/, '');
-    add(rel.includes('/api/') ? 'next-api-route' : 'next-pages-route', toPagesRoutePath(raw), file, 'high');
+  const pagesMatch = projectRel.match(/^(?:src\/)?pages\/(.*)\.(tsx?|jsx?)$/);
+  if (pagesMatch && !['_app', '_document'].includes(pagesMatch[1].split('/').at(-1))) {
+    const raw = pagesMatch[1];
+    add(raw.startsWith('api/') ? 'next-api-route' : 'next-pages-route', toPagesRoutePath(raw), file, 'high');
   }
 
-  if (/^(src\/)?pages\/.*\.vue$/.test(rel)) {
-    const raw = rel.replace(/^(src\/)?pages\//, '').replace(/\.vue$/, '');
-    add('nuxt-pages-route', toPagesRoutePath(raw), file, 'high');
+  const nuxtPagesMatch = projectRel.match(/^(?:src\/)?(?:app\/)?pages\/(.*)\.vue$/);
+  if (nuxtPagesMatch) {
+    add('nuxt-pages-route', toPagesRoutePath(nuxtPagesMatch[1]), file, 'high');
   }
 
   for (const match of uncommented.matchAll(/\b(?:app|router)\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/g)) {

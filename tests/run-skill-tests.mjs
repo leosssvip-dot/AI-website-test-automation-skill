@@ -1700,9 +1700,11 @@ test('route-inventory handles Next.js app API root routes and route groups', () 
 
 test('route-inventory recognizes modern Next.js route methods without comment false positives', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'api-method-route-inventory-'));
-  fs.mkdirSync(path.join(fixture, 'app', 'api', 'items'), { recursive: true });
+  const appRoot = path.join(fixture, 'apps', 'web', 'app');
+  fs.mkdirSync(path.join(appRoot, 'api', 'items'), { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web' }));
   fs.writeFileSync(
-    path.join(fixture, 'app', 'api', 'items', 'route.ts'),
+    path.join(appRoot, 'api', 'items', 'route.ts'),
     [
       'export function GET() { return Response.json([]); }',
       'export const POST = async () => Response.json({}, { status: 201 });',
@@ -1712,9 +1714,9 @@ test('route-inventory recognizes modern Next.js route methods without comment fa
       '/* export const PATCH = async () => new Response(null); */',
     ].join('\n'),
   );
-  fs.mkdirSync(path.join(fixture, 'app', 'api', 'commented'), { recursive: true });
+  fs.mkdirSync(path.join(appRoot, 'api', 'commented'), { recursive: true });
   fs.writeFileSync(
-    path.join(fixture, 'app', 'api', 'commented', 'route.ts'),
+    path.join(appRoot, 'api', 'commented', 'route.ts'),
     '// export async function DELETE() { return new Response(null); }\n',
   );
 
@@ -1723,6 +1725,43 @@ test('route-inventory recognizes modern Next.js route methods without comment fa
   assert.equal(routes.includes('GET|POST|HEAD|OPTIONS /api/items'), true);
   assert.equal(routes.includes('/api/commented'), true);
   assert.equal(routes.some((route) => /DELETE|PATCH/.test(route)), false);
+});
+
+test('route-inventory anchors framework routes to safe package roots', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'package-root-route-inventory-'));
+  fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({ name: 'root' }));
+  const files = [
+    ['apps/app/package.json', '{}'],
+    ['apps/app/app/page.tsx', 'export default function Home() { return null; }'],
+    ['apps/app/src/app/dashboard/page.tsx', 'export default function Dashboard() { return null; }'],
+    ['packages/pages/package.json', '{}'],
+    ['packages/pages/src/pages/about.tsx', 'export default function About() { return null; }'],
+    ['packages/pages/src/pages/store.vue', '<template><main>Store</main></template>'],
+    ['packages/pages/app/pages/account.vue', '<template><main>Account</main></template>'],
+    ['packages/pages/src/app/pages/settings.vue', '<template><main>Settings</main></template>'],
+    ['packages/ui/package.json', '{}'],
+    ['packages/ui/src/components/pages/Card.tsx', 'export function Card() { return null; }'],
+    ['docs/app/example/page.tsx', 'export default function Example() { return null; }'],
+    ['pages/api.tsx', 'export default function ApiPage() { return null; }'],
+  ];
+  for (const [relative, content] of files) {
+    const target = path.join(fixture, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+  }
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const byFile = new Map(result.routes.map((route) => [route.file, route]));
+  assert.equal(byFile.get('apps/app/app/page.tsx')?.route, '/');
+  assert.equal(byFile.get('apps/app/src/app/dashboard/page.tsx')?.route, '/dashboard');
+  assert.equal(byFile.get('packages/pages/src/pages/about.tsx')?.route, '/about');
+  assert.equal(byFile.get('packages/pages/src/pages/store.vue')?.route, '/store');
+  assert.equal(byFile.get('packages/pages/app/pages/account.vue')?.route, '/account');
+  assert.equal(byFile.get('packages/pages/src/app/pages/settings.vue')?.route, '/settings');
+  assert.equal(byFile.has('packages/ui/src/components/pages/Card.tsx'), false);
+  assert.equal(byFile.has('docs/app/example/page.tsx'), false);
+  assert.equal(byFile.get('pages/api.tsx')?.kind, 'next-pages-route');
+  assert.equal(byFile.get('pages/api.tsx')?.route, '/api');
 });
 
 test('route-inventory normalizes parallel and intercepting Next.js route segments', () => {
