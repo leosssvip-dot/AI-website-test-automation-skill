@@ -131,6 +131,37 @@ test('skill package validator does not execute candidate scripts by default', ()
   assert.equal(fs.existsSync(scorerMarker), false, 'candidate scorer must not execute during validation');
 });
 
+test('skill package validator rejects symlinked required files before reading them', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-symlink-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  fs.rmSync(path.join(fixture, 'SKILL.md'));
+  fs.symlinkSync(path.join(skillRoot, 'SKILL.md'), path.join(fixture, 'SKILL.md'));
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /SKILL\.md.*symbolic link|symbolic link.*SKILL\.md/i);
+});
+
+test('skill package validator rejects oversized required files before reading them', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-oversized-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  fs.truncateSync(path.join(fixture, 'assets', 'readiness-score-template.md'), 3 * 1024 * 1024);
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /readiness-score-template\.md.*size limit|size limit.*readiness-score-template\.md/i);
+});
+
+test('skill package validator rejects candidate script syntax errors', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-syntax-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  fs.writeFileSync(path.join(fixture, 'scripts', 'detect-web-test-stack.mjs'), 'export const = broken;');
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /syntax check failed.*detect-web-test-stack\.mjs/i);
+});
+
 test('repository helper scripts expose their own help contracts', () => {
   for (const script of [
     'detect-web-test-stack.mjs',
@@ -546,7 +577,8 @@ test('summarize-test-report reads every discovered report without silent truncat
   assert.equal(result.filesDiscovered, 21);
   assert.equal(result.filesRead, 21);
   assert.equal(result.filesSkipped, 0);
-  assert.equal(result.truncated, false);
+  assert.equal(result.filesTruncated, false);
+  assert.equal(Object.hasOwn(result, 'truncated'), false);
   assert.equal(result.counts.failed, 1);
 });
 
@@ -556,9 +588,14 @@ test('summarize-test-report redacts common secrets from failure output', () => {
     path.join(fixture, 'secrets.json'),
     JSON.stringify({
       title: 'secret-bearing failure',
-      status: 'failed',
+      status: 'credential-status-secret',
+      ok: false,
       message: [
         'Authorization: Bearer auth-secret-123',
+        'Authorization: Basic basic-credential-234',
+        'Authorization: Digest username="digest-user", response="digest-response-secret-345", nonce="digest-nonce-456"',
+        'Authorization: AWS4-HMAC-SHA256 Credential=aws-credential-secret-567, SignedHeaders=host, Signature=aws-signature-secret-678',
+        'headers={"Authorization":"Basic json-basic-secret-789"}',
         'Bearer standalone-secret-456',
         'Cookie: session=cookie-secret-789; theme=dark',
         'Set-Cookie: refresh=set-cookie-secret-012; HttpOnly',
@@ -574,6 +611,14 @@ test('summarize-test-report redacts common secrets from failure output', () => {
   const serialized = JSON.stringify(result);
   for (const secret of [
     'auth-secret-123',
+    'basic-credential-234',
+    'digest-user',
+    'digest-response-secret-345',
+    'digest-nonce-456',
+    'aws-credential-secret-567',
+    'aws-signature-secret-678',
+    'json-basic-secret-789',
+    'credential-status-secret',
     'standalone-secret-456',
     'cookie-secret-789',
     'set-cookie-secret-012',
@@ -585,7 +630,46 @@ test('summarize-test-report redacts common secrets from failure output', () => {
   ]) {
     assert.equal(serialized.includes(secret), false, `expected ${secret} to be redacted`);
   }
+  assert.equal(result.failures[0].title, 'secret-bearing failure');
+  assert.equal(result.failures[0].status, 'failed');
   assert.match(result.failures[0].message, /\[REDACTED\]/);
+});
+
+test('summarize-test-report caps details without losing aggregate counts', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-detail-cap-'));
+  fs.writeFileSync(
+    path.join(fixture, 'many-failures.json'),
+    JSON.stringify({
+      tests: Array.from({ length: 150 }, (_, index) => ({
+        title: `failure ${index}`,
+        status: 'failed',
+        message: index === 0 ? 'x'.repeat(2100) : `message ${index}`,
+        attachments: [{ name: `trace ${index}`, path: `/tmp/trace-${index}.zip` }],
+      })),
+    }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(result.counts.failed, 150);
+  assert.equal(result.failures.length, 100);
+  assert.equal(result.failureDetailsOmitted, 50);
+  assert.equal(result.artifacts.length, 100);
+  assert.equal(result.artifactDetailsOmitted, 50);
+  assert.equal(result.outputTextFieldsTruncated, 1);
+});
+
+test('summarize-test-report skips report symlinks outside the target root', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-symlink-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-outside-'));
+  fs.writeFileSync(path.join(fixture, 'inside.json'), JSON.stringify({ title: 'inside', status: 'passed' }));
+  fs.writeFileSync(path.join(outside, 'outside.json'), JSON.stringify({ title: 'outside', status: 'failed' }));
+  fs.symlinkSync(path.join(outside, 'outside.json'), path.join(fixture, 'linked.json'));
+
+  const result = runJson('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(result.filesDiscovered, 1);
+  assert.equal(result.filesRead, 1);
+  assert.equal(result.counts.passed, 1);
+  assert.equal(result.counts.failed, 0);
 });
 
 test('summarize-test-report escapes untrusted markdown fields', () => {

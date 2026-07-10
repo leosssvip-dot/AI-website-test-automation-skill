@@ -29,13 +29,18 @@ if (!fs.existsSync(target)) {
 
 const REPORT_EXT = /\.(json|xml)$/;
 const MAX_OUTPUT_TEXT_LENGTH = 2000;
+const MAX_DETAIL_ITEMS = 100;
+const outputStats = { textFieldsTruncated: 0 };
 
 function collectReportFiles(p) {
-  const stat = fs.statSync(p);
+  const stat = fs.lstatSync(p);
+  if (stat.isSymbolicLink()) return [];
   if (stat.isFile()) return REPORT_EXT.test(p) ? [p] : [];
+  if (!stat.isDirectory()) return [];
   const out = [];
   for (const entry of fs.readdirSync(p, { withFileTypes: true })) {
     const full = path.join(p, entry.name);
+    if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) out.push(...collectReportFiles(full));
     else if (REPORT_EXT.test(entry.name)) out.push(full);
   }
@@ -57,9 +62,9 @@ function redactSecrets(value) {
       /([?&](?:(?:[^?&#=\s]*(?:token|secret|password|passwd|pwd)[^?&#=\s]*)|api[_-]?key|key|auth|authorization|session|cookie)=)[^&#\s]*/gi,
       '$1[REDACTED]',
     )
-    .replace(/(\bAuthorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/(\bAuthorization\b["']?\s*[:=]\s*["']?)[^\r\n]*/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+[-A-Za-z0-9._~+/=]+/gi, 'Bearer [REDACTED]')
-    .replace(/(\b(?:Set-Cookie|Cookie)\s*[:=]\s*)[^\r\n]*/gi, '$1[REDACTED]')
+    .replace(/(\b(?:Set-Cookie|Cookie)\b["']?\s*[:=]\s*["']?)[^\r\n]*/gi, '$1[REDACTED]')
     .replace(
       /\b([A-Za-z0-9_.-]*(?:token|secret|password|passwd|pwd)[A-Za-z0-9_.-]*)\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&\r\n]+)/gi,
       '$1=[REDACTED]',
@@ -69,11 +74,12 @@ function redactSecrets(value) {
 function sanitizeOutputText(value) {
   const redacted = redactSecrets(value).replace(/\0/g, '');
   if (redacted.length <= MAX_OUTPUT_TEXT_LENGTH) return redacted;
+  outputStats.textFieldsTruncated += 1;
   return `${redacted.slice(0, MAX_OUTPUT_TEXT_LENGTH)}…[TRUNCATED]`;
 }
 
 function escapeMarkdown(value) {
-  return sanitizeOutputText(value)
+  return redactSecrets(value)
     .replace(/\s*[\r\n]+\s*/g, ' ')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -81,9 +87,28 @@ function escapeMarkdown(value) {
     .replace(/([\\`*_[\]{}()#+\-.!|>])/g, '\\$1');
 }
 
+function recordFailure(failures, detailCounts, failure) {
+  detailCounts.failures += 1;
+  if (failures.length >= MAX_DETAIL_ITEMS) return;
+  failures.push({
+    title: sanitizeOutputText(failure.title),
+    status: failure.status,
+    message: sanitizeOutputText(failure.message),
+  });
+}
+
+function recordArtifact(artifacts, detailCounts, artifact) {
+  detailCounts.artifacts += 1;
+  if (artifacts.length >= MAX_DETAIL_ITEMS) return;
+  artifacts.push({
+    name: sanitizeOutputText(artifact.name),
+    path: sanitizeOutputText(artifact.path),
+  });
+}
+
 // JUnit XML: count <testcase> entries; a nested <failure>/<error> means failed,
 // <skipped> means skipped, otherwise passed. Returns how many testcases were seen.
-function visitJUnit(xml, counts, failures) {
+function visitJUnit(xml, counts, failures, detailCounts) {
   // Strip XML comments so a commented-out testcase is not counted, then use a
   // lazy attribute match so a self-closing `<testcase .../>` ends its own match
   // instead of backtracking into the next testcase's closing tag.
@@ -93,10 +118,10 @@ function visitJUnit(xml, counts, failures) {
     const title = decodeXml(testcase.match(/\bname="([^"]*)"/)?.[1] || 'unknown test');
     if (/<(failure|error)\b/.test(testcase)) {
       counts.failed += 1;
-      failures.push({
-        title: sanitizeOutputText(title),
+      recordFailure(failures, detailCounts, {
+        title,
         status: 'failed',
-        message: sanitizeOutputText(decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || '')),
+        message: decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || ''),
       });
     } else if (/<skipped\b/.test(testcase)) {
       counts.skipped += 1;
@@ -114,9 +139,9 @@ function findTitle(stack) {
   return 'unknown test';
 }
 
-function visit(value, counts, failures = [], artifacts = [], stack = []) {
+function visit(value, counts, failures, artifacts, detailCounts, stack = []) {
   if (Array.isArray(value)) {
-    for (const item of value) visit(item, counts, failures, artifacts, stack);
+    for (const item of value) visit(item, counts, failures, artifacts, detailCounts, stack);
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -125,10 +150,10 @@ function visit(value, counts, failures = [], artifacts = [], stack = []) {
   if (['passed', 'pass', 'ok'].includes(status) || value.ok === true) counts.passed += 1;
   if (['failed', 'fail', 'timedout', 'interrupted'].includes(status) || value.ok === false) {
     counts.failed += 1;
-    failures.push({
-      title: sanitizeOutputText(findTitle(stack)),
-      status: status || 'failed',
-      message: sanitizeOutputText(value.error?.message || value.message || ''),
+    recordFailure(failures, detailCounts, {
+      title: findTitle(nextStack),
+      status: status === 'timedout' || status === 'interrupted' ? status : 'failed',
+      message: value.error?.message || value.message || '',
     });
   }
   if (['skipped', 'pending'].includes(status)) counts.skipped += 1;
@@ -136,33 +161,34 @@ function visit(value, counts, failures = [], artifacts = [], stack = []) {
   if (Array.isArray(value.attachments)) {
     for (const item of value.attachments) {
       if (item?.path) {
-        artifacts.push({
-          name: sanitizeOutputText(item.name || 'artifact'),
-          path: sanitizeOutputText(item.path),
+        recordArtifact(artifacts, detailCounts, {
+          name: item.name || 'artifact',
+          path: item.path,
         });
       }
     }
   }
-  for (const child of Object.values(value)) visit(child, counts, failures, artifacts, nextStack);
+  for (const child of Object.values(value)) visit(child, counts, failures, artifacts, detailCounts, nextStack);
 }
 
 const files = collectReportFiles(target).sort();
 const counts = { passed: 0, failed: 0, skipped: 0, retried: 0 };
 const failures = [];
 const artifacts = [];
+const detailCounts = { failures: 0, artifacts: 0 };
 const unsupported = [];
 let jsonFilesRead = 0;
 let xmlFilesRead = 0;
 
 for (const file of files) {
   if (file.endsWith('.xml')) {
-    const seen = visitJUnit(fs.readFileSync(file, 'utf8'), counts, failures);
+    const seen = visitJUnit(fs.readFileSync(file, 'utf8'), counts, failures, detailCounts);
     if (seen > 0) xmlFilesRead += 1;
     else unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
     continue;
   }
   try {
-    visit(JSON.parse(fs.readFileSync(file, 'utf8')), counts, failures, artifacts);
+    visit(JSON.parse(fs.readFileSync(file, 'utf8')), counts, failures, artifacts, detailCounts);
     jsonFilesRead += 1;
   } catch {
     unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
@@ -175,13 +201,16 @@ const summary = {
   filesDiscovered: files.length,
   filesRead,
   filesSkipped: files.length - filesRead,
-  truncated: false,
+  filesTruncated: false,
   jsonFilesRead,
   xmlFilesRead,
   unsupported,
   counts,
   failures,
+  failureDetailsOmitted: detailCounts.failures - failures.length,
   artifacts,
+  artifactDetailsOmitted: detailCounts.artifacts - artifacts.length,
+  outputTextFieldsTruncated: outputStats.textFieldsTruncated,
   nextAction: counts.failed > 0 ? 'Inspect failure artifacts and classify with flake-triage.md.' : 'Review coverage gaps and decide next automation candidates.',
 };
 
@@ -199,7 +228,7 @@ if (format === 'md') {
 - Files discovered: ${summary.filesDiscovered}
 - Files read: ${summary.filesRead}
 - Files skipped: ${summary.filesSkipped}
-- Truncated: ${summary.truncated}
+- Files truncated: ${summary.filesTruncated}
 - JSON files read: ${summary.jsonFilesRead}
 - JUnit XML files read: ${summary.xmlFilesRead}
 - Passed signals: ${counts.passed}
@@ -207,7 +236,10 @@ if (format === 'md') {
 - Skipped signals: ${counts.skipped}
 - Retried/flaky signals: ${counts.retried}
 - Failures: ${markdownFailures}
+- Failure details omitted: ${summary.failureDetailsOmitted}
 - Artifacts: ${markdownArtifacts}
+- Artifact details omitted: ${summary.artifactDetailsOmitted}
+- Output text fields truncated: ${summary.outputTextFieldsTruncated}
 - Next action: ${summary.nextAction}`);
 } else {
   console.log(JSON.stringify(summary, null, 2));

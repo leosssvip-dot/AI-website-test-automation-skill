@@ -53,11 +53,7 @@ const requiredScripts = [
   'export-testcases.mjs',
   'validate-skill.mjs',
 ];
-
-const exists = (rel) => fs.existsSync(path.join(root, rel));
-const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
-
-for (const rel of [
+const requiredPackageFiles = [
   'SKILL.md',
   'agents/openai.yaml',
   'assets/testcase-template.yaml',
@@ -74,15 +70,44 @@ for (const rel of [
   'assets/automation-templates/testing-library.test.tsx',
   'assets/automation-templates/selenium.test.js',
   'assets/automation-templates/webdriverio.e2e.js',
-]) {
-  if (!exists(rel)) errors.push(`Missing required file: ${rel}`);
+  ...requiredRefs.map((ref) => `references/${ref}`),
+  ...requiredScripts.map((script) => `scripts/${script}`),
+];
+const MAX_REQUIRED_FILE_BYTES = 2 * 1024 * 1024;
+const safeFiles = new Set();
+
+for (const rel of requiredPackageFiles) {
+  const full = path.join(root, rel);
+  let stat;
+  try {
+    stat = fs.lstatSync(full);
+  } catch (error) {
+    if (error?.code === 'ENOENT') errors.push(`Missing required file: ${rel}`);
+    else errors.push(`Cannot inspect required file: ${rel} (${error?.code || 'unknown error'})`);
+    continue;
+  }
+  if (stat.isSymbolicLink()) {
+    errors.push(`Required file must not be a symbolic link: ${rel}`);
+    continue;
+  }
+  if (!stat.isFile()) {
+    errors.push(`Required file must be a regular file: ${rel}`);
+    continue;
+  }
+  if (stat.size > MAX_REQUIRED_FILE_BYTES) {
+    errors.push(`Required file exceeds the 2 MiB size limit: ${rel}`);
+    continue;
+  }
+  safeFiles.add(rel);
 }
-for (const ref of requiredRefs) {
-  if (!exists(`references/${ref}`)) errors.push(`Missing reference: references/${ref}`);
+
+if (errors.length) {
+  console.error(errors.map((e) => `- ${e}`).join('\n'));
+  process.exit(1);
 }
-for (const script of requiredScripts) {
-  if (!exists(`scripts/${script}`)) errors.push(`Missing script: scripts/${script}`);
-}
+
+const exists = (rel) => safeFiles.has(rel);
+const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
 if (exists('SKILL.md')) {
   const skill = read('SKILL.md');

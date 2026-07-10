@@ -16,7 +16,7 @@ CI evidence should make failures actionable.
 
 Redact tokens, cookies, passwords, customer data, one-time IDs, raw payloads, and PII from chat, docs, reports, and screenshots.
 
-Run `scripts/summarize-test-report.mjs` with its default safe output. It reads every discovered JSON/XML report, reports discovered/read/skipped counts, redacts common authorization headers, cookies, token/secret/password assignments, and secret-bearing URL query values, and escapes untrusted Markdown fields. Redaction is pattern-based and cannot identify every form of PII or sensitive business data, so review summaries before sharing them outside the authorized audience.
+Run `scripts/summarize-test-report.mjs` with its default safe output. It reads every discovered non-symlink JSON/XML report, reports discovered/read/skipped counts, retains at most 100 failure and artifact details while reporting omitted-detail totals, redacts common authorization headers, cookies, token/secret/password assignments, and secret-bearing URL query values, and escapes untrusted Markdown fields. Redaction is pattern-based and cannot identify every form of PII or sensitive business data, so review summaries before sharing them outside the authorized audience.
 
 ## Handoff Summary
 
