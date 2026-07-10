@@ -28,6 +28,7 @@ if (!fs.existsSync(target)) {
 }
 
 const REPORT_EXT = /\.(json|xml)$/;
+const MAX_OUTPUT_TEXT_LENGTH = 2000;
 
 function collectReportFiles(p) {
   const stat = fs.statSync(p);
@@ -50,6 +51,36 @@ function decodeXml(value) {
     .replace(/&amp;/g, '&');
 }
 
+function redactSecrets(value) {
+  return String(value ?? '')
+    .replace(
+      /([?&](?:(?:[^?&#=\s]*(?:token|secret|password|passwd|pwd)[^?&#=\s]*)|api[_-]?key|key|auth|authorization|session|cookie)=)[^&#\s]*/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/(\bAuthorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/\bBearer\s+[-A-Za-z0-9._~+/=]+/gi, 'Bearer [REDACTED]')
+    .replace(/(\b(?:Set-Cookie|Cookie)\s*[:=]\s*)[^\r\n]*/gi, '$1[REDACTED]')
+    .replace(
+      /\b([A-Za-z0-9_.-]*(?:token|secret|password|passwd|pwd)[A-Za-z0-9_.-]*)\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&\r\n]+)/gi,
+      '$1=[REDACTED]',
+    );
+}
+
+function sanitizeOutputText(value) {
+  const redacted = redactSecrets(value).replace(/\0/g, '');
+  if (redacted.length <= MAX_OUTPUT_TEXT_LENGTH) return redacted;
+  return `${redacted.slice(0, MAX_OUTPUT_TEXT_LENGTH)}…[TRUNCATED]`;
+}
+
+function escapeMarkdown(value) {
+  return sanitizeOutputText(value)
+    .replace(/\s*[\r\n]+\s*/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/([\\`*_[\]{}()#+\-.!|>])/g, '\\$1');
+}
+
 // JUnit XML: count <testcase> entries; a nested <failure>/<error> means failed,
 // <skipped> means skipped, otherwise passed. Returns how many testcases were seen.
 function visitJUnit(xml, counts, failures) {
@@ -63,9 +94,9 @@ function visitJUnit(xml, counts, failures) {
     if (/<(failure|error)\b/.test(testcase)) {
       counts.failed += 1;
       failures.push({
-        title,
+        title: sanitizeOutputText(title),
         status: 'failed',
-        message: decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || ''),
+        message: sanitizeOutputText(decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || '')),
       });
     } else if (/<skipped\b/.test(testcase)) {
       counts.skipped += 1;
@@ -95,22 +126,27 @@ function visit(value, counts, failures = [], artifacts = [], stack = []) {
   if (['failed', 'fail', 'timedout', 'interrupted'].includes(status) || value.ok === false) {
     counts.failed += 1;
     failures.push({
-      title: findTitle(stack),
+      title: sanitizeOutputText(findTitle(stack)),
       status: status || 'failed',
-      message: value.error?.message || value.message || '',
+      message: sanitizeOutputText(value.error?.message || value.message || ''),
     });
   }
   if (['skipped', 'pending'].includes(status)) counts.skipped += 1;
   if (Array.isArray(value.results) && value.results.length > 1) counts.retried += 1;
   if (Array.isArray(value.attachments)) {
     for (const item of value.attachments) {
-      if (item?.path) artifacts.push({ name: item.name || 'artifact', path: item.path });
+      if (item?.path) {
+        artifacts.push({
+          name: sanitizeOutputText(item.name || 'artifact'),
+          path: sanitizeOutputText(item.path),
+        });
+      }
     }
   }
   for (const child of Object.values(value)) visit(child, counts, failures, artifacts, nextStack);
 }
 
-const files = collectReportFiles(target).slice(0, 20);
+const files = collectReportFiles(target).sort();
 const counts = { passed: 0, failed: 0, skipped: 0, retried: 0 };
 const failures = [];
 const artifacts = [];
@@ -122,19 +158,24 @@ for (const file of files) {
   if (file.endsWith('.xml')) {
     const seen = visitJUnit(fs.readFileSync(file, 'utf8'), counts, failures);
     if (seen > 0) xmlFilesRead += 1;
-    else unsupported.push(path.relative(process.cwd(), file));
+    else unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
     continue;
   }
   try {
     visit(JSON.parse(fs.readFileSync(file, 'utf8')), counts, failures, artifacts);
     jsonFilesRead += 1;
   } catch {
-    unsupported.push(path.relative(process.cwd(), file));
+    unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
   }
 }
 
+const filesRead = jsonFilesRead + xmlFilesRead;
 const summary = {
-  reportPath: target,
+  reportPath: sanitizeOutputText(target),
+  filesDiscovered: files.length,
+  filesRead,
+  filesSkipped: files.length - filesRead,
+  truncated: false,
   jsonFilesRead,
   xmlFilesRead,
   unsupported,
@@ -145,16 +186,28 @@ const summary = {
 };
 
 if (format === 'md') {
+  const markdownFailures = failures.length
+    ? failures
+        .map((failure) => `${escapeMarkdown(failure.title)}${failure.message ? ` — ${escapeMarkdown(failure.message)}` : ''}`)
+        .join('; ')
+    : 'none';
+  const markdownArtifacts = artifacts.length
+    ? artifacts.map((artifact) => escapeMarkdown(artifact.path)).join(', ')
+    : 'none';
   console.log(`## Test Report Summary
 
+- Files discovered: ${summary.filesDiscovered}
+- Files read: ${summary.filesRead}
+- Files skipped: ${summary.filesSkipped}
+- Truncated: ${summary.truncated}
 - JSON files read: ${summary.jsonFilesRead}
 - JUnit XML files read: ${summary.xmlFilesRead}
 - Passed signals: ${counts.passed}
 - Failed signals: ${counts.failed}
 - Skipped signals: ${counts.skipped}
 - Retried/flaky signals: ${counts.retried}
-- Failures: ${failures.map((failure) => failure.title).join(', ') || 'none'}
-- Artifacts: ${artifacts.map((artifact) => artifact.path).join(', ') || 'none'}
+- Failures: ${markdownFailures}
+- Artifacts: ${markdownArtifacts}
 - Next action: ${summary.nextAction}`);
 } else {
   console.log(JSON.stringify(summary, null, 2));

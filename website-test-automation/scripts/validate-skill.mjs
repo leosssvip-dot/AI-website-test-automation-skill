@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 function usage() {
-  console.log('Usage: validate-skill.mjs [skill-path]\nValidates website-test-automation skill structure and core contracts.');
+  console.log('Usage: validate-skill.mjs [skill-path]\nStatically validates website-test-automation skill structure and core contracts.');
 }
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
@@ -194,24 +194,16 @@ for (const [rel, phrase] of [
   if (exists(rel) && !read(rel).includes(phrase)) errors.push(`${rel} missing expected phrase: ${phrase}`);
 }
 
-if (exists('scripts/score-test-readiness.mjs')) {
-  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'score-test-readiness.mjs'), root], { encoding: 'utf8' });
-  if (result.status !== 0) errors.push('scripts/score-test-readiness.mjs failed on skill root.');
-  else {
-    try {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed.dimensionCount !== 8) errors.push('Readiness scorer must report 8 dimensions.');
-      if (parsed.overallScore < 80) errors.push('Readiness scorer must rate the skill package at 80+.');
-    } catch {
-      errors.push('scripts/score-test-readiness.mjs must output JSON.');
-    }
-  }
-}
-
 for (const script of requiredScripts) {
   if (!exists(`scripts/${script}`)) continue;
-  const result = spawnSync(process.execPath, [path.join(root, 'scripts', script), '--help'], { encoding: 'utf8' });
-  if (result.status !== 0) errors.push(`Script --help failed: scripts/${script}`);
+  const result = spawnSync(process.execPath, ['--check', path.join(root, 'scripts', script)], {
+    cwd: root,
+    encoding: 'utf8',
+    env: {},
+    timeout: 5000,
+  });
+  if (result.error?.code === 'ETIMEDOUT') errors.push(`Script syntax check timed out: scripts/${script}`);
+  else if (result.status !== 0) errors.push(`Script syntax check failed: scripts/${script}`);
 }
 
 if (errors.length) {

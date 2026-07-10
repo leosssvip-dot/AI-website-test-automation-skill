@@ -103,6 +103,49 @@ test('skill package validator rejects missing human reasonableness contract', ()
   assert.match(`${result.stdout}\n${result.stderr}`, /human-reasonableness|Human Reasonableness/i);
 });
 
+test('skill package validator does not execute candidate scripts by default', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-static-'));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  const helperMarker = path.join(fixture, 'candidate-helper-executed');
+  const scorerMarker = path.join(fixture, 'candidate-scorer-executed');
+  fs.writeFileSync(
+    path.join(fixture, 'scripts', 'detect-web-test-stack.mjs'),
+    [
+      "import fs from 'node:fs';",
+      `fs.writeFileSync(${JSON.stringify(helperMarker)}, 'executed');`,
+      "console.log('candidate helper ran');",
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'scripts', 'score-test-readiness.mjs'),
+    [
+      "import fs from 'node:fs';",
+      `fs.writeFileSync(${JSON.stringify(scorerMarker)}, 'executed');`,
+      "console.log(JSON.stringify({ dimensionCount: 8, overallScore: 100 }));",
+    ].join('\n'),
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
+  assert.equal(result.status, 0, `expected static validation to pass\n${result.stdout}\n${result.stderr}`);
+  assert.equal(fs.existsSync(helperMarker), false, 'candidate helper script must not execute during validation');
+  assert.equal(fs.existsSync(scorerMarker), false, 'candidate scorer must not execute during validation');
+});
+
+test('repository helper scripts expose their own help contracts', () => {
+  for (const script of [
+    'detect-web-test-stack.mjs',
+    'route-inventory.mjs',
+    'summarize-test-report.mjs',
+    'score-test-readiness.mjs',
+    'validate-testcases.mjs',
+    'export-testcases.mjs',
+    'validate-skill.mjs',
+  ]) {
+    const result = runRaw('node', [path.join(skillRoot, 'scripts', script), '--help']);
+    assert.equal(result.status, 0, `${script} --help failed\n${result.stdout}\n${result.stderr}`);
+  }
+});
+
 test('skill metadata and workflow expose design-source triggers', () => {
   const skill = read('website-test-automation/SKILL.md');
   const description = skill.match(/^---\n[\s\S]*?description:\s*(.+)\n---/)?.[1] || '';
@@ -484,6 +527,95 @@ test('summarize-test-report accepts space-separated markdown format flag', () =>
     'md',
   ]);
   assert.match(output, /^## Test Report Summary/);
+});
+
+test('summarize-test-report reads every discovered report without silent truncation', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-complete-'));
+  for (let index = 0; index < 20; index += 1) {
+    fs.writeFileSync(
+      path.join(fixture, `${String(index).padStart(2, '0')}-passed.json`),
+      JSON.stringify({ title: `passing ${index}`, status: 'passed' }),
+    );
+  }
+  fs.writeFileSync(
+    path.join(fixture, '99-failed.json'),
+    JSON.stringify({ title: 'late failure', status: 'failed', message: 'failed after the old limit' }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(result.filesDiscovered, 21);
+  assert.equal(result.filesRead, 21);
+  assert.equal(result.filesSkipped, 0);
+  assert.equal(result.truncated, false);
+  assert.equal(result.counts.failed, 1);
+});
+
+test('summarize-test-report redacts common secrets from failure output', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-redaction-'));
+  fs.writeFileSync(
+    path.join(fixture, 'secrets.json'),
+    JSON.stringify({
+      title: 'secret-bearing failure',
+      status: 'failed',
+      message: [
+        'Authorization: Bearer auth-secret-123',
+        'Bearer standalone-secret-456',
+        'Cookie: session=cookie-secret-789; theme=dark',
+        'Set-Cookie: refresh=set-cookie-secret-012; HttpOnly',
+        'API_TOKEN=token-secret-345',
+        'CLIENT_SECRET: client-secret-678',
+        'PASSWORD="password-secret-901"',
+        'GET https://example.test/callback?access_token=query-secret-234&safe=yes&password=query-password-567',
+      ].join('\n'),
+    }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  const serialized = JSON.stringify(result);
+  for (const secret of [
+    'auth-secret-123',
+    'standalone-secret-456',
+    'cookie-secret-789',
+    'set-cookie-secret-012',
+    'token-secret-345',
+    'client-secret-678',
+    'password-secret-901',
+    'query-secret-234',
+    'query-password-567',
+  ]) {
+    assert.equal(serialized.includes(secret), false, `expected ${secret} to be redacted`);
+  }
+  assert.match(result.failures[0].message, /\[REDACTED\]/);
+});
+
+test('summarize-test-report escapes untrusted markdown fields', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-markdown-'));
+  fs.writeFileSync(
+    path.join(fixture, 'untrusted.json'),
+    JSON.stringify({
+      title: '<script>alert(1)</script>\n# title instruction [click](javascript:alert(1))',
+      tests: [
+        {
+          status: 'failed',
+          message: '<img src=x onerror=alert(1)>\n# message instruction',
+          attachments: [{ name: 'trace', path: '<iframe src=x>/trace.zip\n# path instruction' }],
+        },
+      ],
+    }),
+  );
+
+  const output = run('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    fixture,
+    '--format',
+    'md',
+  ]);
+  assert.doesNotMatch(output, /<(?:script|img|iframe)\b/i);
+  assert.doesNotMatch(output, /\n# (?:title|message|path) instruction/);
+  assert.doesNotMatch(output, /\[click\]\(javascript:/);
+  assert.match(output, /&lt;script&gt;/);
+  assert.match(output, /&lt;img/);
+  assert.match(output, /&lt;iframe/);
 });
 
 test('output templates include response-only and implemented automation summaries', () => {
