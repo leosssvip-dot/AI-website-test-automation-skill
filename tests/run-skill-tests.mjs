@@ -1508,6 +1508,81 @@ test('detect-web-test-stack supports object and pnpm workspace declarations', ()
   assert.equal(pnpmResult.testFrameworks.includes('vitest'), true);
 });
 
+test('detect-web-test-stack honors globstar, exclusions, and fail-closed pattern limits', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-glob-stack-'));
+  for (const packagePath of ['apps/web', 'packages/nested/tool', 'packages/excluded/private']) {
+    fs.mkdirSync(path.join(fixture, packagePath), { recursive: true });
+  }
+  fs.writeFileSync(
+    path.join(fixture, 'package.json'),
+    JSON.stringify({
+      workspaces: ['apps/**/web', 'packages/**', '!packages/excluded/**'],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'apps', 'web', 'package.json'),
+    JSON.stringify({ name: 'web', dependencies: { next: '15.0.0' } }),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'packages', 'nested', 'tool', 'package.json'),
+    JSON.stringify({ name: 'tool', dependencies: { fastify: '5.0.0' } }),
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'packages', 'excluded', 'private', 'package.json'),
+    JSON.stringify({ name: 'excluded', devDependencies: { jest: '30.0.0' } }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', fixture]);
+  assert.equal(result.packages.some((entry) => entry.path === 'apps/web'), true);
+  assert.equal(result.packages.some((entry) => entry.path === 'packages/nested/tool'), true);
+  assert.equal(result.packages.some((entry) => entry.path === 'packages/excluded/private'), false);
+  assert.equal(result.testFrameworks.includes('jest'), false);
+  assert.equal(result.workspace.discoveryStatus, 'complete');
+
+  const unsupportedFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-exotic-stack-'));
+  fs.mkdirSync(path.join(unsupportedFixture, 'apps', 'web'), { recursive: true });
+  fs.writeFileSync(
+    path.join(unsupportedFixture, 'package.json'),
+    JSON.stringify({ workspaces: ['apps/?eb'] }),
+  );
+  fs.writeFileSync(
+    path.join(unsupportedFixture, 'apps', 'web', 'package.json'),
+    JSON.stringify({ dependencies: { next: '15.0.0' } }),
+  );
+  const unsupportedResult = runJson(
+    'node',
+    ['website-test-automation/scripts/detect-web-test-stack.mjs', unsupportedFixture],
+  );
+  assert.equal(unsupportedResult.packages.some((entry) => entry.path === 'apps/web'), false);
+  assert.equal(unsupportedResult.workspace.discoveryStatus, 'unsupported-patterns');
+  assert.match(unsupportedResult.confidenceNotes.join('\n'), /Unsupported workspace pattern/);
+
+  const excessiveFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-pattern-budget-stack-'));
+  fs.writeFileSync(
+    path.join(excessiveFixture, 'package.json'),
+    JSON.stringify({ workspaces: Array.from({ length: 129 }, (_, index) => `packages/package-${index}`) }),
+  );
+  const excessiveResult = runJson(
+    'node',
+    ['website-test-automation/scripts/detect-web-test-stack.mjs', excessiveFixture],
+  );
+  assert.equal(excessiveResult.workspace.discoveryStatus, 'pattern-budget-exceeded');
+  assert.match(excessiveResult.confidenceNotes.join('\n'), /pattern limit/i);
+});
+
+test('detect-web-test-stack preserves oversized package status', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'oversized-package-stack-'));
+  fs.writeFileSync(
+    path.join(fixture, 'package.json'),
+    JSON.stringify({ padding: 'x'.repeat(2 * 1024 * 1024) }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/detect-web-test-stack.mjs', fixture]);
+  assert.equal(result.hasPackageJson, true);
+  assert.equal(result.packageJsonStatus, 'oversized');
+  assert.doesNotMatch(result.confidenceNotes.join('\n'), /Malformed package\.json/);
+});
+
 test('detect-web-test-stack distinguishes malformed package files and continues workspaces', () => {
   const malformedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'malformed-root-stack-'));
   fs.writeFileSync(path.join(malformedRoot, 'package.json'), '{');

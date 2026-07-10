@@ -24,10 +24,12 @@ try {
 const ignored = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
 const MAX_ROUTE_FILES = 20_000;
 const MAX_DIRECTORIES = 10_000;
+const MAX_ENTRIES = 50_000;
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 const routeFiles = [];
 const notes = [];
 let visitedDirectories = 0;
+let visitedEntries = 0;
 let scanStopped = false;
 
 const addNote = (message) => {
@@ -41,12 +43,39 @@ const isContained = (target) => {
 
 function walk(dir) {
   if (scanStopped) return;
+  let handle;
   let entries;
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    const stats = fs.lstatSync(dir);
+    if (stats.isSymbolicLink() || !stats.isDirectory() || !isContained(fs.realpathSync(dir))) {
+      addNote(`Skipped unsafe route directory: ${relativePath(dir)}`);
+      return;
+    }
+    handle = fs.opendirSync(dir);
+    entries = [];
+    while (!scanStopped) {
+      const entry = handle.readSync();
+      if (!entry) break;
+      visitedEntries += 1;
+      if (visitedEntries > MAX_ENTRIES) {
+        addNote(`Route entry scan exceeded ${MAX_ENTRIES}; remaining entries were ignored.`);
+        scanStopped = true;
+        break;
+      }
+      entries.push(entry);
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
   } catch (error) {
     addNote(`Unreadable directory skipped: ${relativePath(dir)} (${error.code || error.message})`);
     return;
+  } finally {
+    if (handle) {
+      try {
+        handle.closeSync();
+      } catch {
+        // A close race must not hide the bounded scan result.
+      }
+    }
   }
   for (const entry of entries) {
     if (scanStopped) return;
@@ -84,8 +113,23 @@ function walk(dir) {
 
 walk(root);
 
+function readBoundedUtf8(fd, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+    if (bytesRead === 0) break;
+    chunks.push(buffer.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  return total > maxBytes ? null : Buffer.concat(chunks, total).toString('utf8');
+}
+
 function readRouteSource(file) {
   const label = relativePath(file);
+  let fd;
   let stats;
   try {
     stats = fs.lstatSync(file);
@@ -105,10 +149,32 @@ function readRouteSource(file) {
       addNote(`Skipped route file outside repository root: ${label}`);
       return null;
     }
-    return fs.readFileSync(file, 'utf8');
+    const noFollow = fs.constants.O_NOFOLLOW || 0;
+    fd = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
+    const openedStats = fs.fstatSync(fd);
+    const currentStats = fs.lstatSync(file);
+    const sameFile = openedStats.isFile() && currentStats.isFile() && !currentStats.isSymbolicLink() &&
+      stats.dev === openedStats.dev && stats.ino === openedStats.ino &&
+      currentStats.dev === openedStats.dev && currentStats.ino === openedStats.ino;
+    if (!sameFile || !isContained(fs.realpathSync(file))) {
+      addNote(`Route file changed during inspection: ${label}`);
+      return null;
+    }
+    const content = readBoundedUtf8(fd, MAX_SOURCE_BYTES);
+    if (content === null) {
+      addNote(`Skipped oversized route file: ${label}`);
+      return null;
+    }
+    return content;
   } catch (error) {
+    if (error.code === 'ELOOP') {
+      addNote(`Skipped route file symlink: ${label}`);
+      return null;
+    }
     addNote(`Unreadable route file skipped: ${label} (${error.code || error.message})`);
     return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
   }
 }
 

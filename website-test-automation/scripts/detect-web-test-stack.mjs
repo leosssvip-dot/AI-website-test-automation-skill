@@ -24,6 +24,11 @@ try {
 const MAX_PACKAGE_BYTES = 2 * 1024 * 1024;
 const MAX_WORKSPACE_DIRECTORIES = 10_000;
 const MAX_WORKSPACE_PACKAGES = 500;
+const MAX_WORKSPACE_ENTRIES = 50_000;
+const MAX_WORKSPACE_MATCH_CHECKS = 500_000;
+const MAX_WORKSPACE_PATTERNS = 128;
+const MAX_WORKSPACE_PATTERN_BYTES = 16 * 1024;
+const MAX_WORKSPACE_PATTERN_LENGTH = 256;
 const ignoredDirectories = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
 const confidenceNotes = [];
 
@@ -70,6 +75,67 @@ function inspectRegularFile(target, label, maxBytes = Number.POSITIVE_INFINITY) 
   return { status: 'regular', exists: true, stats };
 }
 
+function readBoundedUtf8(fd, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+    if (bytesRead === 0) break;
+    chunks.push(buffer.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  if (total > maxBytes) return { status: 'oversized' };
+  return { status: 'regular', content: Buffer.concat(chunks, total).toString('utf8') };
+}
+
+function readRegularTextFile(target, label, maxBytes) {
+  const inspection = inspectRegularFile(target, label, maxBytes);
+  if (inspection.status !== 'regular') return inspection;
+
+  let fd;
+  try {
+    const noFollow = fs.constants.O_NOFOLLOW || 0;
+    fd = fs.openSync(target, fs.constants.O_RDONLY | noFollow);
+    const openedStats = fs.fstatSync(fd);
+    const sameInspectedFile = openedStats.dev === inspection.stats.dev && openedStats.ino === inspection.stats.ino;
+    if (!openedStats.isFile() || !sameInspectedFile) {
+      addNote(`File changed during inspection: ${label}`);
+      return { status: 'non-regular', exists: true };
+    }
+    if (openedStats.size > maxBytes) {
+      addNote(`Oversized file skipped: ${label}`);
+      return { status: 'oversized', exists: true };
+    }
+
+    const currentStats = fs.lstatSync(target);
+    const sameCurrentFile = currentStats.isFile() && !currentStats.isSymbolicLink() &&
+      currentStats.dev === openedStats.dev && currentStats.ino === openedStats.ino;
+    const currentRealPath = fs.realpathSync(target);
+    if (!sameCurrentFile || !isContained(currentRealPath)) {
+      addNote(`File changed during inspection: ${label}`);
+      return { status: 'symlink-rejected', exists: true };
+    }
+
+    const readResult = readBoundedUtf8(fd, maxBytes);
+    if (readResult.status === 'oversized') {
+      addNote(`Oversized file skipped: ${label}`);
+      return { status: 'oversized', exists: true };
+    }
+    return { ...inspection, content: readResult.content };
+  } catch (error) {
+    if (error.code === 'ELOOP') {
+      addNote(`Skipped symlink: ${label}`);
+      return { status: 'symlink-rejected', exists: true };
+    }
+    addNote(`Unreadable ${label}: ${error.code || error.message}`);
+    return { status: 'non-regular', exists: true };
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 function safeFileExists(baseDir, name) {
   const target = path.join(baseDir, name);
   return inspectRegularFile(target, rel(target)).status === 'regular';
@@ -99,7 +165,7 @@ function safeDirectoryExists(target, label) {
 function inspectPackage(packageDir, packagePath) {
   const packageFile = path.join(packageDir, 'package.json');
   const label = packagePath === '.' ? 'package.json' : `${packagePath}/package.json`;
-  const inspection = inspectRegularFile(packageFile, label, MAX_PACKAGE_BYTES);
+  const inspection = readRegularTextFile(packageFile, label, MAX_PACKAGE_BYTES);
   const base = {
     path: packagePath,
     name: null,
@@ -115,13 +181,12 @@ function inspectPackage(packageDir, packagePath) {
     return { report: base, pkg: null };
   }
   if (inspection.status === 'oversized') {
-    addNote(`Malformed package.json: ${label} (exceeds ${MAX_PACKAGE_BYTES} bytes)`);
-    return { report: { ...base, packageJsonStatus: 'malformed' }, pkg: null };
+    return { report: { ...base, packageJsonStatus: 'oversized' }, pkg: null };
   }
 
   let pkg;
   try {
-    pkg = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+    pkg = JSON.parse(inspection.content);
     if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) throw new Error('root value must be an object');
   } catch {
     addNote(`Malformed package.json: ${label}`);
@@ -199,26 +264,50 @@ function stripYamlComment(value) {
   return value;
 }
 
+let workspacePatternFailure = null;
+let workspacePatternCount = 0;
+let workspacePatternBytes = 0;
+
+function rejectWorkspacePattern(source, value, status = 'unsupported-patterns') {
+  workspacePatternFailure ||= status;
+  addNote(`Unsupported workspace pattern from ${source}: ${String(value).slice(0, MAX_WORKSPACE_PATTERN_LENGTH)}`);
+  return null;
+}
+
 function normalizeWorkspacePattern(value, source) {
-  if (typeof value !== 'string') return null;
+  workspacePatternCount += 1;
+  if (workspacePatternCount > MAX_WORKSPACE_PATTERNS) {
+    workspacePatternFailure = 'pattern-budget-exceeded';
+    addNote(`Workspace pattern limit exceeded ${MAX_WORKSPACE_PATTERNS}; workspace discovery was disabled.`);
+    return null;
+  }
+  if (typeof value !== 'string') return rejectWorkspacePattern(source, value);
+
   let pattern = value.trim();
   if ((pattern.startsWith('"') && pattern.endsWith('"')) || (pattern.startsWith("'") && pattern.endsWith("'"))) {
     pattern = pattern.slice(1, -1).trim();
   }
+  const negated = pattern.startsWith('!');
+  if (negated) pattern = pattern.slice(1).trim();
   pattern = pattern.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '');
-  if (!pattern) return null;
-  if (pattern.startsWith('!') || path.posix.isAbsolute(pattern) || pattern.split('/').includes('..') || /[{}()[\]]/.test(pattern)) {
-    addNote(`Unsupported workspace pattern from ${source}: ${pattern}`);
+  const byteLength = Buffer.byteLength(pattern);
+  workspacePatternBytes += byteLength;
+  if (byteLength > MAX_WORKSPACE_PATTERN_LENGTH || workspacePatternBytes > MAX_WORKSPACE_PATTERN_BYTES) {
+    workspacePatternFailure = 'pattern-budget-exceeded';
+    addNote(`Workspace pattern byte budget exceeded; workspace discovery was disabled.`);
     return null;
   }
-  return pattern;
+  if (!pattern || path.posix.isAbsolute(pattern) || pattern.split('/').includes('..') || /[?{}()[\]\0]/.test(pattern) || pattern.includes('***')) {
+    return rejectWorkspacePattern(source, `${negated ? '!' : ''}${pattern}`);
+  }
+  return { pattern, negated, display: `${negated ? '!' : ''}${pattern}` };
 }
 
 function readPnpmWorkspacePatterns() {
   const workspaceFile = path.join(root, 'pnpm-workspace.yaml');
-  const inspection = inspectRegularFile(workspaceFile, 'pnpm-workspace.yaml', MAX_PACKAGE_BYTES);
+  const inspection = readRegularTextFile(workspaceFile, 'pnpm-workspace.yaml', MAX_PACKAGE_BYTES);
   if (inspection.status !== 'regular') return { present: false, patterns: [] };
-  const lines = fs.readFileSync(workspaceFile, 'utf8').split(/\r?\n/);
+  const lines = inspection.content.split(/\r?\n/);
   const patterns = [];
   let inPackages = false;
   for (const rawLine of lines) {
@@ -239,64 +328,160 @@ function readPnpmWorkspacePatterns() {
   return { present: true, patterns };
 }
 
-function globToRegExp(pattern) {
-  let source = '^';
-  for (let index = 0; index < pattern.length; index += 1) {
-    const char = pattern[index];
-    if (char === '*' && pattern[index + 1] === '*') {
-      source += '.*';
-      index += 1;
-    } else if (char === '*') {
-      source += '[^/]*';
-    } else if (char === '?') {
-      source += '[^/]';
-    } else {
-      source += char.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-    }
-  }
-  return new RegExp(`${source}$`);
+function compileWorkspaceMatcher(pattern) {
+  const patternSegments = pattern.split('/');
+  const segmentMatchers = patternSegments.map((segment) => {
+    if (segment === '**') return null;
+    const source = segment.split('*')
+      .map((part) => part.replace(/[|\\{}()[\]^$+?.]/g, '\\$&'))
+      .join('[^/]*');
+    return new RegExp(`^${source}$`);
+  });
+  return (candidate) => {
+    const candidateSegments = candidate.split('/').filter(Boolean);
+    const memo = new Map();
+    const matches = (patternIndex, candidateIndex) => {
+      const key = `${patternIndex}:${candidateIndex}`;
+      if (memo.has(key)) return memo.get(key);
+      let result;
+      if (patternIndex === patternSegments.length) {
+        result = candidateIndex === candidateSegments.length;
+      } else if (patternSegments[patternIndex] === '**') {
+        result = matches(patternIndex + 1, candidateIndex) ||
+          (candidateIndex < candidateSegments.length && matches(patternIndex, candidateIndex + 1));
+      } else {
+        result = candidateIndex < candidateSegments.length &&
+          segmentMatchers[patternIndex].test(candidateSegments[candidateIndex]) &&
+          matches(patternIndex + 1, candidateIndex + 1);
+      }
+      memo.set(key, result);
+      return result;
+    };
+    return matches(0, 0);
+  };
 }
 
-function discoverWorkspaceDirectories(patterns) {
-  if (patterns.length === 0) return [];
-  const matchers = patterns.map(globToRegExp);
+let workspaceScanTruncated = false;
+
+function discoverWorkspaceDirectories(patternDeclarations) {
+  const includeMatchers = patternDeclarations.filter((entry) => !entry.negated).map((entry) => compileWorkspaceMatcher(entry.pattern));
+  const excludeMatchers = patternDeclarations.filter((entry) => entry.negated).map((entry) => compileWorkspaceMatcher(entry.pattern));
+  if (includeMatchers.length === 0) return [];
   const matches = new Set();
   let visitedDirectories = 0;
+  let visitedEntries = 0;
+  let matcherChecks = 0;
   let stopped = false;
+
+  function matchesAny(matchers, candidate) {
+    for (const matcher of matchers) {
+      matcherChecks += 1;
+      if (matcherChecks > MAX_WORKSPACE_MATCH_CHECKS) {
+        addNote(`Workspace pattern matching exceeded ${MAX_WORKSPACE_MATCH_CHECKS} checks; remaining directories were ignored.`);
+        workspaceScanTruncated = true;
+        stopped = true;
+        return false;
+      }
+      if (matcher(candidate)) return true;
+    }
+    return false;
+  }
+
+  function readDirectory(directory) {
+    let handle;
+    const entries = [];
+    try {
+      const stats = fs.lstatSync(directory);
+      const real = fs.realpathSync(directory);
+      if (stats.isSymbolicLink() || !stats.isDirectory() || !isContained(real)) {
+        addNote(`Skipped unsafe workspace directory: ${rel(directory)}`);
+        return entries;
+      }
+      handle = fs.opendirSync(directory);
+      while (!stopped) {
+        const entry = handle.readSync();
+        if (!entry) break;
+        visitedEntries += 1;
+        if (visitedEntries > MAX_WORKSPACE_ENTRIES) {
+          addNote(`Workspace entry scan exceeded ${MAX_WORKSPACE_ENTRIES}; remaining entries were ignored.`);
+          workspaceScanTruncated = true;
+          stopped = true;
+          break;
+        }
+        entries.push(entry);
+      }
+    } catch (error) {
+      addNote(`Unreadable workspace directory: ${rel(directory)} (${error.code || error.message})`);
+      workspaceScanTruncated = true;
+    } finally {
+      if (handle) {
+        try {
+          handle.closeSync();
+        } catch {
+          // The scan result is already bounded; a close race must not hide it.
+        }
+      }
+    }
+    return entries.sort((left, right) => left.name.localeCompare(right.name));
+  }
 
   function walk(directory) {
     if (stopped) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
-    } catch {
-      return;
-    }
+    const entries = readDirectory(directory);
     for (const entry of entries) {
       if (stopped || ignoredDirectories.has(entry.name)) continue;
       const full = path.join(directory, entry.name);
       const relative = rel(full);
-      if (entry.isSymbolicLink()) {
+      let stats;
+      try {
+        stats = fs.lstatSync(full);
+      } catch (error) {
+        addNote(`Unreadable workspace path: ${relative} (${error.code || error.message})`);
+        continue;
+      }
+      if (stats.isSymbolicLink()) {
         addNote(`Skipped workspace scan symlink: ${relative}`);
         continue;
       }
-      if (!entry.isDirectory()) continue;
+      if (!stats.isDirectory()) continue;
+      let real;
+      try {
+        real = fs.realpathSync(full);
+      } catch (error) {
+        addNote(`Unreadable workspace directory: ${relative} (${error.code || error.message})`);
+        continue;
+      }
+      if (!isContained(real)) {
+        addNote(`Skipped workspace directory outside repository root: ${relative}`);
+        continue;
+      }
       visitedDirectories += 1;
       if (visitedDirectories > MAX_WORKSPACE_DIRECTORIES) {
         addNote(`Workspace directory scan exceeded ${MAX_WORKSPACE_DIRECTORIES}; remaining directories were ignored.`);
+        workspaceScanTruncated = true;
         stopped = true;
         return;
       }
-      if (matchers.some((matcher) => matcher.test(relative))) {
+      const included = matchesAny(includeMatchers, relative);
+      const excluded = !stopped && matchesAny(excludeMatchers, relative);
+      if (included && !excluded) {
         const packageInspection = inspectRegularFile(path.join(full, 'package.json'), `${relative}/package.json`, MAX_PACKAGE_BYTES);
-        if (packageInspection.exists) matches.add(relative);
+        if (packageInspection.exists && !matches.has(relative)) {
+          if (matches.size >= MAX_WORKSPACE_PACKAGES) {
+            addNote(`Workspace package limit reached ${MAX_WORKSPACE_PACKAGES}; additional packages were ignored.`);
+            workspaceScanTruncated = true;
+            stopped = true;
+            return;
+          }
+          matches.add(relative);
+        }
       }
       walk(full);
     }
   }
 
   walk(root);
-  return [...matches].sort().slice(0, MAX_WORKSPACE_PACKAGES);
+  return [...matches].sort();
 }
 
 const rootInspection = inspectPackage(root, '.');
@@ -318,11 +503,10 @@ if (rawWorkspaces.length > 0) {
 const pnpmWorkspace = readPnpmWorkspacePatterns();
 if (pnpmWorkspace.present) workspaceSources.push('pnpm-workspace.yaml');
 workspacePatterns.push(...pnpmWorkspace.patterns);
-const patterns = [...new Set(workspacePatterns)].sort();
-const workspacePaths = discoverWorkspaceDirectories(patterns);
-if (workspacePaths.length >= MAX_WORKSPACE_PACKAGES) {
-  addNote(`Workspace package limit reached ${MAX_WORKSPACE_PACKAGES}; additional packages were ignored.`);
-}
+const patternDeclarations = [...new Map(workspacePatterns.map((entry) => [entry.display, entry])).values()]
+  .sort((left, right) => left.display.localeCompare(right.display));
+const patterns = patternDeclarations.map((entry) => entry.display);
+const workspacePaths = workspacePatternFailure ? [] : discoverWorkspaceDirectories(patternDeclarations);
 
 const packages = [
   analyzePackage(root, rootInspection),
@@ -356,7 +540,7 @@ for (const [name, manager] of [
     break;
   }
 }
-if (packageManager === 'unknown' && pnpmWorkspace.present && pnpmWorkspace.patterns.length > 0) packageManager = 'pnpm';
+if (packageManager === 'unknown' && pnpmWorkspace.present) packageManager = 'pnpm';
 if (packageManager === 'unknown') packageManager = normalizePackageManager(rootPkg?.packageManager) || 'unknown';
 
 const ciCandidates = [
@@ -390,6 +574,9 @@ console.log(JSON.stringify({
     sources: [...new Set(workspaceSources)].sort(),
     patterns,
     packageCount: Math.max(0, packages.length - 1),
+    discoveryStatus: workspaceSources.length === 0
+      ? 'not-declared'
+      : workspacePatternFailure || (workspaceScanTruncated ? 'truncated' : 'complete'),
   },
   frameworks,
   testFrameworks,
