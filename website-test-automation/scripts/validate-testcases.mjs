@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from 'node:path';
+import { parseCaseCliArguments } from './lib/cli-options.mjs';
 import { validateCase } from './lib/testcase-schema.mjs';
 import { collectCaseFiles, loadCases } from './lib/yaml-testcases.mjs';
 
@@ -13,35 +14,20 @@ function usage() {
   );
 }
 
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
+const parsedArgs = parseCaseCliArguments(process.argv.slice(2), {
+  formats: ['json', 'md'],
+  defaultFormat: 'json',
+});
+
+if (parsedArgs.help) {
   usage();
   process.exit(0);
 }
-
-const args = process.argv.slice(2);
-const formatFlag = args.find((arg) => arg.startsWith('--format='));
-const formatArgIndex = args.indexOf('--format');
-const formatValue =
-  formatFlag !== undefined
-    ? formatFlag.slice('--format='.length)
-    : formatArgIndex !== -1
-      ? args[formatArgIndex + 1]
-      : 'json';
-const missingFormatValue =
-  (formatFlag !== undefined && formatValue === '') ||
-  (formatArgIndex !== -1 && (!formatValue || formatValue.startsWith('--')));
-const format = formatValue;
-
-const inputArgs = args.filter((arg, i, all) => {
-  if (arg.startsWith('--')) return false;
-  if (all[i - 1] === '--format') return false;
-  return true;
-});
-
-if (inputArgs.length === 0 || missingFormatValue || !['json', 'md'].includes(format)) {
+if (!parsedArgs.ok || parsedArgs.inputs.length === 0) {
   usage();
   process.exit(2);
 }
+const { format, inputs: inputArgs } = parsedArgs;
 
 let files;
 try {

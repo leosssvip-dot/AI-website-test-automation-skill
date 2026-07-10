@@ -136,6 +136,14 @@ function parseKey(raw) {
   return key;
 }
 
+function assertSafeJsonKeys(value) {
+  if (value === null || typeof value !== 'object') return;
+  for (const key of Object.keys(value)) {
+    if (DANGEROUS_KEYS.has(key)) throw new Error(`Unsafe mapping key: ${key}`);
+    assertSafeJsonKeys(value[key]);
+  }
+}
+
 function parseFlowSeq(value) {
   const body = value.slice(1, -1).trim();
   if (body === '') return [];
@@ -264,6 +272,7 @@ export function loadCases(file) {
   const text = fs.readFileSync(file, 'utf8');
   if (/\.json$/i.test(file)) {
     const parsed = JSON.parse(text);
+    assertSafeJsonKeys(parsed);
     return Array.isArray(parsed) ? parsed : [parsed];
   }
   return parseDocument(text);

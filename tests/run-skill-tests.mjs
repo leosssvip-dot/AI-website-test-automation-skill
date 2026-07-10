@@ -997,6 +997,56 @@ test('test-case loading handles supported extensions case-insensitively and pars
   }
 });
 
+test('JSON test cases reject dangerous own keys recursively without rejecting ordinary extension fields', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-json-keys-'));
+  const ownKey = (object, key, value) => {
+    Object.defineProperty(object, key, { value, enumerable: true, configurable: true, writable: true });
+    return object;
+  };
+
+  const topLevel = ownKey(validTestCase(), '__proto__', { polluted: true });
+  const nestedSource = validTestCase();
+  ownKey(nestedSource.source, 'constructor', { polluted: true });
+  const nestedAutomation = validTestCase();
+  ownKey(nestedAutomation.automation, 'prototype', { polluted: true });
+  const nestedArray = validTestCase({ metadata: [{ safe: true }] });
+  ownKey(nestedArray.metadata[0], '__proto__', { polluted: true });
+  const safeExtensions = validTestCase({
+    metadata: [{ custom: { owner: 'qa' } }],
+    source: { docs: ['docs/PRD.md'], code: [], observed: [], vendor: { name: 'internal' } },
+  });
+
+  const dangerous = {
+    'top-level.json': topLevel,
+    'nested-source.json': nestedSource,
+    'nested-automation.json': nestedAutomation,
+    'nested-array.json': nestedArray,
+  };
+  for (const [name, value] of Object.entries(dangerous)) {
+    fs.writeFileSync(path.join(dir, name), JSON.stringify(value));
+  }
+  const safeFile = path.join(dir, 'safe-extensions.json');
+  fs.writeFileSync(safeFile, JSON.stringify(safeExtensions));
+
+  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', dir]);
+  assert.equal(result.status, 1, `dangerous JSON keys must fail\n${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  for (const name of Object.keys(dangerous)) {
+    const report = summary.files.find((item) => item.file.endsWith(name));
+    assert.equal(report.errors.some((error) => /parse error:.*unsafe mapping key/i.test(error)), true, name);
+  }
+  const safeReport = summary.files.find((item) => item.file.endsWith('safe-extensions.json'));
+  assert.deepEqual(safeReport.errors, []);
+
+  const exported = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    path.join(dir, 'top-level.json'),
+  ]);
+  assert.equal(exported.status, 1);
+  assert.equal(exported.stdout, '');
+  assert.match(exported.stderr, /parse error:.*unsafe mapping key/i);
+});
+
 test('validate-testcases rejects malformed required and optional field types', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-types-'));
   const file = path.join(dir, 'types.json');
@@ -1278,9 +1328,17 @@ test('output templates include defect report and release test plan', () => {
   assert.match(outputTemplates, /Exit criteria/);
 });
 
-test('validate-testcases rejects missing, empty, or unsupported format values as usage errors', () => {
+test('validate-testcases rejects missing, unknown, duplicate, conflicting, or unsupported options', () => {
   const input = 'tests/fixtures/testcases/valid.yaml';
-  for (const args of [[input, '--format'], [input, '--format='], [input, '--format', 'xml']]) {
+  const invalidArgs = [
+    [input, '--format'],
+    [input, '--format='],
+    [input, '--format', 'xml'],
+    [input, '--unknown'],
+    [input, '--format=json', '--format=json'],
+    [input, '--format=json', '--format=md'],
+  ];
+  for (const args of invalidArgs) {
     const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', ...args]);
     assert.equal(result.status, 2, `${args.join(' ')} must be a usage error\n${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /Usage: validate-testcases\.mjs/);
@@ -1288,14 +1346,22 @@ test('validate-testcases rejects missing, empty, or unsupported format values as
   }
 });
 
-test('export-testcases rejects missing, empty, or unsupported option values without exporting', () => {
+test('export-testcases rejects missing, unknown, duplicate, conflicting, or unsupported options', () => {
   const input = 'tests/fixtures/testcases/valid.yaml';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-duplicate-options-'));
+  const firstOut = path.join(dir, 'first.csv');
+  const secondOut = path.join(dir, 'second.csv');
   const invalidArgs = [
     [input, '--out'],
     [input, '--out='],
     [input, '--format'],
     [input, '--format='],
     [input, '--format', 'xml'],
+    [input, '--unknown'],
+    [input, '--format=csv', '--format=csv'],
+    [input, '--format=csv', '--format=md'],
+    [input, `--out=${firstOut}`, `--out=${firstOut}`],
+    [input, `--out=${firstOut}`, `--out=${secondOut}`],
   ];
   for (const args of invalidArgs) {
     const result = runRaw('node', ['website-test-automation/scripts/export-testcases.mjs', ...args]);
@@ -1303,6 +1369,22 @@ test('export-testcases rejects missing, empty, or unsupported option values with
     assert.match(result.stdout, /Usage: export-testcases\.mjs/);
     assert.doesNotMatch(result.stdout, /^"ID"/m);
   }
+});
+
+test('test-case CLIs accept dash-prefixed input paths after the option terminator', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-option-terminator-'));
+  const inputName = '--cases.json';
+  fs.writeFileSync(path.join(dir, inputName), JSON.stringify(validTestCase()));
+  const validateScript = path.join(skillRoot, 'scripts/validate-testcases.mjs');
+  const exportScript = path.join(skillRoot, 'scripts/export-testcases.mjs');
+
+  const validated = runRaw('node', [validateScript, '--format', 'md', '--', inputName], { cwd: dir });
+  assert.equal(validated.status, 0, `terminator validation failed\n${validated.stdout}\n${validated.stderr}`);
+  assert.match(validated.stdout, /## Test Case Validation/);
+
+  const exported = runRaw('node', [exportScript, '--format=md', '--', inputName], { cwd: dir });
+  assert.equal(exported.status, 0, `terminator export failed\n${exported.stdout}\n${exported.stderr}`);
+  assert.match(exported.stdout, /^\| ID \| Title \| Priority \|/);
 });
 
 test('export-testcases preserves equals signs in --out=<path> values', () => {
