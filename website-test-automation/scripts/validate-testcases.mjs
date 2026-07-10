@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { parseCaseCliArguments } from './lib/cli-options.mjs';
 import { validateCase } from './lib/testcase-schema.mjs';
-import { collectCaseFiles, loadCases } from './lib/yaml-testcases.mjs';
+import { collectCaseFiles, createCaseLoadBudget, loadCases } from './lib/yaml-testcases.mjs';
 
 function usage() {
   console.log(
@@ -41,6 +41,7 @@ const fileReports = [];
 const allErrors = [];
 const allWarnings = [];
 let totalCases = 0;
+const loadBudget = createCaseLoadBudget();
 
 if (files.length === 0) allErrors.push('no test case files found');
 
@@ -48,7 +49,7 @@ for (const file of files) {
   const relFile = path.relative(process.cwd(), file);
   let cases;
   try {
-    cases = loadCases(file);
+    cases = loadCases(file, loadBudget);
   } catch (error) {
     const message = `parse error: ${error.message}`;
     fileReports.push({ file: relFile, cases: 0, errors: [message], warnings: [] });

@@ -23,4 +23,3 @@ Do not add runtime dependencies. Keep the documented YAML subset, but make it fa
 ## Verification Design
 
 For every script defect, add a minimal regression test and observe the expected failure before changing implementation. For skill prose and templates, preserve the prior no-skill baseline from the review, then forward-test the revised skill on a fresh fixture that is not described by `worked-example.md`. Completion requires targeted tests for each slice, full `npm run validate`, official `quick_validate.py`, clean diff review, and source/install parity.
-

@@ -39,13 +39,13 @@ assumptions: []
 unknowns: []
 ```
 
-`scripts/validate-testcases.mjs` errors when an own `id`, `title`, `source`, `source_status`, `surface`, `layer`, `disposition`, `type`, `priority`, `steps`, `expected`, or `automation` field is missing; inherited properties never satisfy the schema. Every other schema field is still expected, and an absent field produces a warning rather than an error.
+`scripts/validate-testcases.mjs` errors when an own `id`, `title`, `source`, `source_status`, `surface`, `layer`, `disposition`, `type`, `priority`, `steps`, `expected`, or `automation` field is missing; inherited properties never satisfy the schema. Required string identity fields must be nonblank after trimming. Every other schema field is still expected, and an absent field produces a warning rather than an error.
 
 ## Field Shapes
 
 - `id`, `title`, `source_status`, `surface`, `layer`, `disposition`, `type`, and `priority` must be strings.
 - `source` must be a plain mapping. Its `docs`, `code`, and `observed` fields are required arrays containing only strings.
-- `steps` and `expected` must be string arrays. Empty arrays remain quality warnings because a case is not executable or deterministic until both are filled.
+- `steps` and `expected` must be string arrays with at least one nonblank entry. Empty or whitespace-only arrays are validation errors because they describe a non-executable shell rather than a case.
 - `automation` must be a plain mapping. When present, `recommended` must be boolean, `target` must use the enum below, and `preferred_tools` must be a string array.
 - `mismatch`, `human_expectation`, `why_unreasonable`, `suggested_product_fix`, `risk`, and `persona` must be strings when present. `logic_risk` must be boolean.
 - `preconditions`, `negative_cases`, `data_needs`, `assumptions`, and `unknowns` must be string arrays when present.
@@ -95,10 +95,10 @@ Existing case artifacts must add `surface`, `layer`, and `disposition`; these ar
 
 ## Validation
 
-Run `scripts/validate-testcases.mjs <file-or-dir>` on generated cases to enforce this schema. It errors on missing core fields, wrong field shapes, invalid enums, unresolved mismatch/logic-risk automation conflicts, and P0/P1 cases without non-empty source evidence or unknown text; it warns on vague expectations, empty steps, and unfilled non-core schema fields. It accepts a single mapping, a sequence of cases, multi-document YAML, or JSON.
+Run `scripts/validate-testcases.mjs <file-or-dir>` on generated cases to enforce this schema. It errors on missing or blank core identity/action fields, wrong field shapes, invalid enums, unresolved mismatch/logic-risk automation conflicts, and P0/P1 cases without non-empty source evidence or unknown text; it warns on vague expectations and unfilled non-core schema fields. It accepts a single mapping, a sequence of cases, multi-document YAML, or JSON.
 
 The bundled zero-dependency parser supports plain and quoted scalars, flow and block sequences, nested mappings, multi-document YAML, and JSON. File extensions are matched case-insensitively. It returns parse errors for unterminated or mismatched quoted scalars, malformed flow collections, unsafe mapping keys (`__proto__`, `prototype`, or `constructor`), block scalars (`|`, `>`), anchors/aliases/merge keys, and unexpected indentation. Unsafe keys are also rejected recursively in JSON objects and arrays. Parser-created mappings have no prototype. It does not support trailing `#` comments after values — keep each step and expectation on a single line. A value that both starts and ends with brackets parses as a flow collection; quote it (e.g. `"[Smoke]"`) when it is meant as text. Every JSON-array or YAML-sequence member is schema-validated; scalar members are errors rather than being discarded.
 
-Direct inputs must be regular `.yaml`, `.yml`, or `.json` files or directories. Direct symbolic links and unsupported files are rejected; directory scans skip symbolic links and de-duplicate repeated inputs. A directory with no supported regular case files fails validation instead of reporting an empty success. Both CLIs reject unknown or repeated options; use `--` before a dash-prefixed input path.
+Direct inputs must be regular `.yaml`, `.yml`, or `.json` files or directories. Direct symbolic links and unsupported files are rejected; directory scans skip symbolic links and de-duplicate repeated inputs. Scans are bounded to 1,000 case files, 5,000 directories, 20,000 directory entries, 2 MiB per file, and 32 MiB of actual aggregate input. Files are opened without following the final symlink, rechecked by inode, and read through the same bounded file descriptor. Exceeding any budget fails validation/export, and export writes no artifact. A directory with no supported regular case files fails validation instead of reporting an empty success. Both CLIs reject unknown or repeated options; use `--` before a dash-prefixed input path.
 
 Run `scripts/export-testcases.mjs <file-or-dir> --format csv|md` to convert validated cases into a CSV for test-management import (TestRail/Xray/ZenTao-style columns) or a Markdown review table. Export uses the same schema validator and fails closed: any parse or schema error exits `1` without emitting a stdout artifact or writing `--out`. An output path that normalizes or resolves to an input file exits `2` without changing the input. Successful `--out` writes use a same-directory temporary file followed by atomic rename, and failed writes clean up the temporary file.

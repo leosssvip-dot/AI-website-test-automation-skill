@@ -12,7 +12,16 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.exit(0);
 }
 
-const root = path.resolve(process.argv[2] || process.cwd());
+const inputRoot = path.resolve(process.argv[2] || process.cwd());
+let root;
+try {
+  const rootStats = fs.statSync(inputRoot);
+  if (!rootStats.isDirectory()) throw new Error('not a directory');
+  root = fs.realpathSync(inputRoot);
+} catch {
+  console.error(`Unreadable skill path: ${inputRoot}`);
+  process.exit(2);
+}
 const errors = [];
 const requiredRefs = [
   'workflow.md',
@@ -45,6 +54,9 @@ const requiredRefs = [
   'black-box-testing.md',
 ];
 const requiredScripts = [
+  'lib/cli-options.mjs',
+  'lib/testcase-schema.mjs',
+  'lib/yaml-testcases.mjs',
   'detect-web-test-stack.mjs',
   'route-inventory.mjs',
   'summarize-test-report.mjs',
@@ -74,9 +86,73 @@ const requiredPackageFiles = [
   ...requiredScripts.map((script) => `scripts/${script}`),
 ];
 const MAX_REQUIRED_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_REQUIRED_BYTES = 32 * 1024 * 1024;
 const safeFiles = new Set();
+const safeContents = new Map();
+const reportedUnsafeParents = new Set();
+let totalRequiredBytes = 0;
+
+function isContained(target) {
+  const relative = path.relative(root, target);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function hasSafeParents(rel) {
+  let current = root;
+  for (const component of rel.split('/').slice(0, -1)) {
+    current = path.join(current, component);
+    let stats;
+    try {
+      stats = fs.lstatSync(current);
+    } catch {
+      return true;
+    }
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      const parentRel = path.relative(root, current).replaceAll(path.sep, '/');
+      if (!reportedUnsafeParents.has(parentRel)) {
+        errors.push(`Required file parent must be a regular in-root directory, not a symbolic link: ${parentRel}`);
+        reportedUnsafeParents.add(parentRel);
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+function readRequiredFile(full, rel, inspectedStats) {
+  let fd;
+  try {
+    fd = fs.openSync(full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const openedStats = fs.fstatSync(fd);
+    const currentStats = fs.lstatSync(full);
+    const sameFile = openedStats.isFile() && currentStats.isFile() && !currentStats.isSymbolicLink() &&
+      inspectedStats.dev === openedStats.dev && inspectedStats.ino === openedStats.ino &&
+      currentStats.dev === openedStats.dev && currentStats.ino === openedStats.ino;
+    if (!sameFile || !isContained(fs.realpathSync(full))) {
+      throw new Error('file changed during inspection');
+    }
+    const chunks = [];
+    let total = 0;
+    while (total <= MAX_REQUIRED_FILE_BYTES) {
+      const remaining = MAX_REQUIRED_FILE_BYTES + 1 - total;
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+      const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      chunks.push(buffer.subarray(0, bytesRead));
+      total += bytesRead;
+    }
+    if (total > MAX_REQUIRED_FILE_BYTES) throw new Error('file grew beyond the 2 MiB size limit');
+    return Buffer.concat(chunks, total).toString('utf8');
+  } catch (error) {
+    if (error.code === 'ELOOP') throw new Error(`symbolic link rejected: ${rel}`);
+    throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
 
 for (const rel of requiredPackageFiles) {
+  if (!hasSafeParents(rel)) continue;
   const full = path.join(root, rel);
   let stat;
   try {
@@ -98,6 +174,34 @@ for (const rel of requiredPackageFiles) {
     errors.push(`Required file exceeds the 2 MiB size limit: ${rel}`);
     continue;
   }
+  if (totalRequiredBytes + stat.size > MAX_TOTAL_REQUIRED_BYTES) {
+    errors.push(`Required files exceed the 32 MiB aggregate size limit at: ${rel}`);
+    continue;
+  }
+  let real;
+  try {
+    real = fs.realpathSync(full);
+  } catch (error) {
+    errors.push(`Cannot resolve required file: ${rel} (${error?.code || 'unknown error'})`);
+    continue;
+  }
+  if (!isContained(real)) {
+    errors.push(`Required file resolves outside the skill root: ${rel}`);
+    continue;
+  }
+  try {
+    const contents = readRequiredFile(full, rel, stat);
+    const bytes = Buffer.byteLength(contents);
+    if (totalRequiredBytes + bytes > MAX_TOTAL_REQUIRED_BYTES) {
+      errors.push(`Required files exceed the 32 MiB aggregate size limit at: ${rel}`);
+      continue;
+    }
+    totalRequiredBytes += bytes;
+    safeContents.set(rel, contents);
+  } catch (error) {
+    errors.push(`Cannot read required file: ${rel} (${error?.code || 'unknown error'})`);
+    continue;
+  }
   safeFiles.add(rel);
 }
 
@@ -107,20 +211,100 @@ if (errors.length) {
 }
 
 const exists = (rel) => safeFiles.has(rel);
-const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const read = (rel) => safeContents.get(rel);
+
+function parseFrontmatterScalar(rawValue) {
+  const value = rawValue.trim();
+  if (value === '' || ['|', '>'].includes(value)) return null;
+  if (value.startsWith('"')) {
+    try {
+      const parsed = JSON.parse(value);
+      return typeof parsed === 'string' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  if (value.startsWith("'")) {
+    if (!value.endsWith("'") || value.length < 2) return null;
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  if (/^[\[{&*!]|^(?:null|~)$/i.test(value)) return null;
+  return value;
+}
+
+function parseOpenAiInterfaceYaml(yaml) {
+  const values = Object.create(null);
+  const issues = [];
+  let rootSeen = false;
+  for (const line of yaml.split('\n')) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
+    if (!rootSeen) {
+      if (line !== 'interface:') {
+        issues.push('agents/openai.yaml must start with an interface mapping.');
+        break;
+      }
+      rootSeen = true;
+      continue;
+    }
+    const entry = line.match(/^  ([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$/);
+    if (!entry) {
+      issues.push(`Invalid agents/openai.yaml interface line: ${line.trim()}`);
+      continue;
+    }
+    const [, key, rawValue] = entry;
+    if (!['display_name', 'short_description', 'default_prompt'].includes(key)) {
+      issues.push(`Unexpected agents/openai.yaml interface key: ${key}`);
+      continue;
+    }
+    if (Object.hasOwn(values, key)) {
+      issues.push(`Duplicate agents/openai.yaml interface key: ${key}`);
+      continue;
+    }
+    const value = parseFrontmatterScalar(rawValue);
+    if (value === null) {
+      issues.push(`Invalid agents/openai.yaml interface scalar: ${key}`);
+      continue;
+    }
+    values[key] = value;
+  }
+  if (!rootSeen) issues.push('agents/openai.yaml missing interface mapping.');
+  return { values, issues };
+}
 
 if (exists('SKILL.md')) {
   const skill = read('SKILL.md');
   const fm = skill.match(/^---\n([\s\S]*?)\n---/);
   if (!fm) errors.push('SKILL.md missing YAML frontmatter.');
   else {
-    const keys = fm[1].split('\n').filter(Boolean).map((line) => line.split(':')[0].trim());
-    for (const key of keys) {
-      if (!['name', 'description'].includes(key)) errors.push(`Unexpected SKILL.md frontmatter key: ${key}`);
+    const frontmatter = Object.create(null);
+    for (const line of fm[1].split('\n')) {
+      if (line.trim() === '') continue;
+      const entry = line.match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$/);
+      if (!entry) {
+        errors.push(`Invalid SKILL.md frontmatter line: ${line.trim() || '(blank)'}`);
+        continue;
+      }
+      const [, key, rawValue] = entry;
+      if (!['name', 'description'].includes(key)) {
+        errors.push(`Unexpected SKILL.md frontmatter key: ${key}`);
+        continue;
+      }
+      if (Object.hasOwn(frontmatter, key)) {
+        errors.push(`Duplicate SKILL.md frontmatter key: ${key}`);
+        continue;
+      }
+      const value = parseFrontmatterScalar(rawValue);
+      if (value === null) {
+        errors.push(`Invalid SKILL.md frontmatter scalar: ${key}`);
+        continue;
+      }
+      frontmatter[key] = value;
     }
-    if (!fm[1].includes('name: website-test-automation')) errors.push('SKILL.md name must be website-test-automation.');
-    if (!fm[1].includes('description:')) errors.push('SKILL.md description missing.');
-    const description = fm[1].match(/^description:\s*(.*)$/m)?.[1] || '';
+    if (frontmatter.name !== 'website-test-automation') errors.push('SKILL.md name must be website-test-automation.');
+    if (typeof frontmatter.description !== 'string' || frontmatter.description.trim() === '') {
+      errors.push('SKILL.md description missing.');
+    }
+    const description = frontmatter.description || '';
     for (const phrase of ['design artifacts', 'Figma', 'Storybook', 'design tokens']) {
       if (!new RegExp(phrase, 'i').test(description)) errors.push(`SKILL.md description missing trigger phrase: ${phrase}`);
     }
@@ -200,9 +384,16 @@ if (exists('references/scenario-workflows.md')) {
 
 if (exists('agents/openai.yaml')) {
   const yaml = read('agents/openai.yaml');
-  const short = yaml.match(/short_description:\s*"([^"]+)"/)?.[1] || '';
+  const { values, issues } = parseOpenAiInterfaceYaml(yaml);
+  errors.push(...issues);
+  const short = values.short_description || '';
   if (short.length < 25 || short.length > 64) errors.push('agents/openai.yaml short_description must be 25-64 chars.');
-  if (!yaml.includes('$website-test-automation')) errors.push('agents/openai.yaml default_prompt must mention $website-test-automation.');
+  if (typeof values.display_name !== 'string' || values.display_name.trim() === '') {
+    errors.push('agents/openai.yaml display_name missing.');
+  }
+  if (!values.default_prompt?.includes('$website-test-automation')) {
+    errors.push('agents/openai.yaml default_prompt must mention $website-test-automation.');
+  }
 }
 
 // Structural invariants are validated above (files, links, frontmatter, workflow order).
@@ -262,10 +453,11 @@ for (const [rel, phrase] of [
 
 for (const script of requiredScripts) {
   if (!exists(`scripts/${script}`)) continue;
-  const result = spawnSync(process.execPath, ['--check', path.join(root, 'scripts', script)], {
+  const result = spawnSync(process.execPath, ['--check', '--input-type=module'], {
     cwd: root,
     encoding: 'utf8',
     env: {},
+    input: read(`scripts/${script}`),
     timeout: 5000,
   });
   if (result.error?.code === 'ETIMEDOUT') errors.push(`Script syntax check timed out: scripts/${script}`);

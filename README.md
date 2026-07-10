@@ -4,7 +4,7 @@
 
 [![Validate](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml/badge.svg)](https://github.com/leosssvip-dot/AI-website-test-automation-skill/actions/workflows/validate.yml)
 ![version](https://img.shields.io/badge/version-v0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-104%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-122%20passing-brightgreen)
 ![readiness](https://img.shields.io/badge/readiness-83%2F100%20calibrated-0ea5e9)
 ![scope](https://img.shields.io/badge/scope-web%20%26%20service%20QA-7c3aed)
 ![license](https://img.shields.io/badge/license-MIT-green)

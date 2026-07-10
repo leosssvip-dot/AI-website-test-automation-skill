@@ -47,7 +47,7 @@ When the tester has only a URL, PRD, prototype, or design artifacts and no repos
 ## Tooling Helpers
 
 - `scripts/detect-web-test-stack.mjs <repo>` detects package manager, frameworks, test tools, scripts, and CI hints.
-- `scripts/route-inventory.mjs <repo>` inventories common website routes and handlers.
+- `scripts/route-inventory.mjs <repo>` inventories common website routes and handlers while excluding static assets, test fixtures, quoted examples, regex literals, and dynamic string prefixes from concrete-route claims.
 - `scripts/summarize-test-report.mjs <report>` summarizes JSON/JUnit-like test reports where possible.
 - `scripts/score-test-readiness.mjs <repo-or-skill>` scores eight website testing workstreams and returns gaps.
 - `scripts/validate-testcases.mjs <file-or-dir>` checks generated test-case YAML/JSON against the schema (required fields, valid enums, source evidence on P0/P1).

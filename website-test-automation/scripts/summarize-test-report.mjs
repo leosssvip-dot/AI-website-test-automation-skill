@@ -22,6 +22,7 @@ if (!targetArg) {
 }
 
 const target = path.resolve(targetArg);
+const REPORT_EXT = /\.(json|xml)$/i;
 let targetStats;
 let reportRoot;
 try {
@@ -34,8 +35,11 @@ try {
   console.error(`Report path not found: ${target}`);
   process.exit(2);
 }
+if (targetStats.isFile() && !REPORT_EXT.test(path.basename(target))) {
+  console.error(`Report file must use a .json or .xml extension: ${target}`);
+  process.exit(2);
+}
 
-const REPORT_EXT = /\.(json|xml)$/;
 const MAX_OUTPUT_TEXT_LENGTH = 2000;
 const MAX_DETAIL_ITEMS = 100;
 const MAX_REPORT_FILE_BYTES = 16 * 1024 * 1024;
@@ -43,6 +47,11 @@ const MAX_REPORT_TOTAL_BYTES = 64 * 1024 * 1024;
 const MAX_REPORT_FILES = 10_000;
 const MAX_REPORT_DIRECTORIES = 10_000;
 const MAX_REPORT_ENTRIES = 50_000;
+const MAX_JSON_STRUCTURE_TOKENS = 200_000;
+const MAX_JSON_NESTING_DEPTH = 256;
+const MAX_XML_ELEMENTS = 200_000;
+const MAX_XML_NESTING_DEPTH = 256;
+const MAX_XML_TESTCASES = 50_000;
 const outputStats = { textFieldsTruncated: 0 };
 const resourceWarnings = [];
 let scanStopped = false;
@@ -97,44 +106,43 @@ function readDirectoryEntries(directory) {
 
 function collectReportFiles(p) {
   const out = [];
-
-  function walk(current) {
-    if (scanStopped) return;
-    const entries = readDirectoryEntries(current);
-    for (const entry of entries) {
-      if (scanStopped) return;
-      const full = path.join(current, entry.name);
-      let stats;
-      try {
-        stats = fs.lstatSync(full);
-      } catch (error) {
-        addResourceWarning(`Unreadable report path was skipped: ${path.relative(reportRoot, full)} (${error.code || error.message})`);
-        continue;
-      }
-      if (stats.isSymbolicLink()) continue;
-      if (stats.isDirectory()) {
-        visitedDirectories += 1;
-        if (visitedDirectories > MAX_REPORT_DIRECTORIES) {
-          addResourceWarning(`Report directory scan exceeded the ${MAX_REPORT_DIRECTORIES}-directory resource limit.`);
-          scanStopped = true;
-          return;
-        }
-        walk(full);
-      } else if (stats.isFile() && REPORT_EXT.test(entry.name)) {
-        if (out.length >= MAX_REPORT_FILES) {
-          addResourceWarning(`Report file discovery exceeded the ${MAX_REPORT_FILES}-file resource limit.`);
-          scanStopped = true;
-          return;
-        }
-        out.push(full);
-      }
-    }
-  }
-
   if (targetStats.isFile()) {
     if (REPORT_EXT.test(p)) out.push(p);
   } else {
-    walk(p);
+    const pending = [p];
+    while (pending.length > 0 && !scanStopped) {
+      const current = pending.pop();
+      visitedDirectories += 1;
+      if (visitedDirectories > MAX_REPORT_DIRECTORIES) {
+        addResourceWarning(`Report directory scan exceeded the ${MAX_REPORT_DIRECTORIES}-directory resource limit.`);
+        scanStopped = true;
+        break;
+      }
+      const childDirectories = [];
+      for (const entry of readDirectoryEntries(current)) {
+        if (scanStopped) break;
+        const full = path.join(current, entry.name);
+        let stats;
+        try {
+          stats = fs.lstatSync(full);
+        } catch (error) {
+          addResourceWarning(`Unreadable report path was skipped: ${path.relative(reportRoot, full)} (${error.code || error.message})`);
+          continue;
+        }
+        if (stats.isSymbolicLink()) continue;
+        if (stats.isDirectory()) {
+          childDirectories.push(full);
+        } else if (stats.isFile() && REPORT_EXT.test(entry.name)) {
+          if (out.length >= MAX_REPORT_FILES) {
+            addResourceWarning(`Report file discovery exceeded the ${MAX_REPORT_FILES}-file resource limit.`);
+            scanStopped = true;
+            break;
+          }
+          out.push(full);
+        }
+      }
+      for (const child of childDirectories.reverse()) pending.push(child);
+    }
   }
   return out;
 }
@@ -217,14 +225,79 @@ function decodeXml(value) {
     .replace(/&amp;/g, '&');
 }
 
+function inspectJsonStructure(value) {
+  let inString = false;
+  let escaped = false;
+  let depth = 0;
+  let tokens = 0;
+  for (const character of value) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === '{' || character === '[') {
+      tokens += 1;
+      depth += 1;
+      if (depth > MAX_JSON_NESTING_DEPTH) {
+        return { ok: false, reason: `JSON nesting exceeds ${MAX_JSON_NESTING_DEPTH}` };
+      }
+    } else if (character === '}' || character === ']') {
+      depth -= 1;
+    } else if (character === ',') {
+      tokens += 1;
+    }
+    if (tokens > MAX_JSON_STRUCTURE_TOKENS) {
+      return { ok: false, reason: `JSON structure exceeds ${MAX_JSON_STRUCTURE_TOKENS} tokens` };
+    }
+  }
+  return { ok: true };
+}
+
+function stripUnsafeControls(value) {
+  return value.replace(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g,
+    '',
+  );
+}
+
+function redactPrivateKeyBlocks(value) {
+  const beginPattern = /-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----/g;
+  const endPattern = /-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/g;
+  let cursor = 0;
+  let output = '';
+  while (true) {
+    beginPattern.lastIndex = cursor;
+    const begin = beginPattern.exec(value);
+    if (!begin) return output + value.slice(cursor);
+    output += value.slice(cursor, begin.index);
+    endPattern.lastIndex = beginPattern.lastIndex;
+    const end = endPattern.exec(value);
+    output += '[REDACTED]';
+    if (!end) return output;
+    cursor = endPattern.lastIndex;
+  }
+}
+
 function redactSecrets(value) {
-  return String(value ?? '')
+  const normalized = stripUnsafeControls(String(value ?? ''));
+  return redactPrivateKeyBlocks(normalized)
     .replace(
-      /-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----[\s\S]*?-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/g,
-      '[REDACTED]',
+      /(?:[\p{L}][\p{L}'’.-]*[ \t]+){1,4}<[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}>/giu,
+      '[REDACTED_PII]',
     )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]')
+    .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[REDACTED_SSN]')
+    .replace(/(?<![A-Za-z0-9])\+\d(?:[\s().-]*\d){7,14}(?![A-Za-z0-9])/g, '[REDACTED_PHONE]')
+    .replace(/(?<!\d)\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)/g, '[REDACTED_PHONE]')
+    .replace(/((?:[A-Za-z]:)?[\\/](?:Users|home)[\\/])[^\\/\s]+/gi, '$1[REDACTED_USER]')
     .replace(
-      /([?&](?:(?:[^?&#=\s]*(?:token|secret|password|passwd|pwd)[^?&#=\s]*)|api[_-]?key|key|auth|authorization|session|cookie)=)[^&#\s]*/gi,
+      /([?&](?:(?:[^?&#=\s]*(?:token|secret|password|passwd|pwd)[^?&#=\s]*)|(?:[A-Za-z0-9.-]+[_-])?(?:sig|signature|credential|code)(?:[_-][A-Za-z0-9.-]+)?|api[_-]?key|key|auth|authorization|session|cookie)=)[^&#\s]*/gi,
       '$1[REDACTED]',
     )
     .replace(/(\bAuthorization\b["']?\s*[:=]\s*["']?)[^\r\n]*/gi, '$1[REDACTED]')
@@ -235,6 +308,11 @@ function redactSecrets(value) {
       '$1=[REDACTED]',
     )
     .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[REDACTED]')
+    .replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g, '[REDACTED_JWT]')
+    .replace(
+      /\b(?:sk-[A-Za-z0-9_-]{16,}|npm_[A-Za-z0-9]{20,}|pypi-[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,})\b/g,
+      '[REDACTED]',
+    )
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED]')
     .replace(/\bAIza[0-9A-Za-z_-]{35}\b/g, '[REDACTED]')
     .replace(/\b(?:sk|rk)_live_[0-9A-Za-z]{16,}\b/g, '[REDACTED]')
@@ -242,7 +320,7 @@ function redactSecrets(value) {
 }
 
 function sanitizeOutputText(value) {
-  const redacted = redactSecrets(value).replace(/\0/g, '');
+  const redacted = redactSecrets(value);
   if (redacted.length <= MAX_OUTPUT_TEXT_LENGTH) return redacted;
   outputStats.textFieldsTruncated += 1;
   return `${redacted.slice(0, MAX_OUTPUT_TEXT_LENGTH)}…[TRUNCATED]`;
@@ -255,6 +333,17 @@ function escapeMarkdown(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/([\\`*_[\]{}()#+\-.!|>])/g, '\\$1');
+}
+
+function displayReportPath(file) {
+  const relative = path.relative(process.cwd(), file);
+  const isLocal = relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+  return isLocal ? relative || '.' : path.basename(file);
+}
+
+function displayDiscoveredReport(file) {
+  return path.relative(reportRoot, file) || path.basename(file);
 }
 
 function recordFailure(failures, detailCounts, failure) {
@@ -276,30 +365,299 @@ function recordArtifact(artifacts, detailCounts, artifact) {
   });
 }
 
-// JUnit XML: count <testcase> entries; a nested <failure>/<error> means failed,
-// <skipped> means skipped, otherwise passed. Returns how many testcases were seen.
+function isXmlWhitespace(character) {
+  return character === ' ' || character === '\t' || character === '\r' || character === '\n';
+}
+
+function isXmlNameStart(character) {
+  return character !== undefined && /[A-Za-z_:]/.test(character);
+}
+
+function isXmlNameCharacter(character) {
+  return character !== undefined && /[A-Za-z0-9_.:-]/.test(character);
+}
+
+function hasValidXmlEntities(value) {
+  let cursor = 0;
+  while (true) {
+    const ampersand = value.indexOf('&', cursor);
+    if (ampersand === -1) return true;
+    const semicolon = value.indexOf(';', ampersand + 1);
+    if (semicolon === -1) return false;
+    const entity = value.slice(ampersand + 1, semicolon);
+    if (!/^(?:amp|lt|gt|apos|quot|#\d+|#x[0-9A-Fa-f]+)$/.test(entity)) return false;
+    cursor = semicolon + 1;
+  }
+}
+
+function readXmlTag(xml, start) {
+  let index = start + 1;
+  let closing = false;
+  if (xml[index] === '/') {
+    closing = true;
+    index += 1;
+  }
+  if (!isXmlNameStart(xml[index])) return null;
+  const nameStart = index;
+  while (isXmlNameCharacter(xml[index])) index += 1;
+  const name = xml.slice(nameStart, index);
+  const attributes = Object.create(null);
+
+  if (closing) {
+    while (isXmlWhitespace(xml[index])) index += 1;
+    if (xml[index] !== '>') return null;
+    return { kind: 'close', name, attributes, end: index + 1 };
+  }
+
+  while (index < xml.length) {
+    let hadWhitespace = false;
+    while (isXmlWhitespace(xml[index])) {
+      hadWhitespace = true;
+      index += 1;
+    }
+    if (xml[index] === '>') return { kind: 'open', name, attributes, selfClosing: false, end: index + 1 };
+    if (xml[index] === '/' && xml[index + 1] === '>') {
+      return { kind: 'open', name, attributes, selfClosing: true, end: index + 2 };
+    }
+    if (!hadWhitespace || !isXmlNameStart(xml[index])) return null;
+
+    const attributeStart = index;
+    while (isXmlNameCharacter(xml[index])) index += 1;
+    const attributeName = xml.slice(attributeStart, index);
+    if (Object.hasOwn(attributes, attributeName)) return null;
+    while (isXmlWhitespace(xml[index])) index += 1;
+    if (xml[index] !== '=') return null;
+    index += 1;
+    while (isXmlWhitespace(xml[index])) index += 1;
+    const quote = xml[index];
+    if (quote !== '"' && quote !== "'") return null;
+    index += 1;
+    const valueStart = index;
+    while (index < xml.length && xml[index] !== quote) {
+      if (xml[index] === '<') return null;
+      index += 1;
+    }
+    if (xml[index] !== quote) return null;
+    const attributeValue = xml.slice(valueStart, index);
+    if (!hasValidXmlEntities(attributeValue)) return null;
+    attributes[attributeName] = attributeValue;
+    index += 1;
+  }
+  return null;
+}
+
+function parseDeclaredCount(attributes, name) {
+  if (!Object.hasOwn(attributes, name)) return null;
+  if (!/^\d+$/.test(attributes[name])) return Number.NaN;
+  return Number(attributes[name]);
+}
+
+function isAllowedJUnitElement(name, stack) {
+  const parent = stack.at(-1)?.name || null;
+  if (parent === null) return name === 'testsuite' || name === 'testsuites';
+  if (parent === 'testsuites') return name === 'testsuite';
+  if (parent === 'testsuite') {
+    return ['properties', 'testcase', 'system-out', 'system-err'].includes(name);
+  }
+  if (parent === 'properties') return name === 'property';
+  if (parent === 'testcase') {
+    return ['failure', 'error', 'skipped', 'system-out', 'system-err'].includes(name);
+  }
+  const resultContentNames = new Set(['failure', 'error', 'system-out', 'system-err']);
+  const insideResultContent = stack.some((frame) => resultContentNames.has(frame.name));
+  if (insideResultContent) {
+    return !['testsuites', 'testsuite', 'testcase', 'properties', 'property', 'failure', 'error', 'skipped'].includes(name);
+  }
+  return false;
+}
+
+// Parse only the XML structure needed for JUnit, but do it in one forward pass.
+// This rejects truncated/mismatched documents before counting any partial results
+// and avoids the catastrophic backtracking risks of whole-document regexes.
+function parseJUnit(xml) {
+  const testcases = [];
+  const stack = [];
+  const totals = { tests: 0, failures: 0, errors: 0, skipped: 0 };
+  let currentTestcase = null;
+  let rootSeen = false;
+  let rootClosed = false;
+  let position = 0;
+  let elementCount = 0;
+
+  const resourceLimit = (message) => {
+    const error = new Error(message);
+    error.code = 'REPORT_RESOURCE_LIMIT';
+    throw error;
+  };
+
+  const finishTestcase = (testcase) => {
+    if (testcase.failureKind && testcase.skipped) return false;
+    if (testcases.length >= MAX_XML_TESTCASES) {
+      resourceLimit(`JUnit testcase count exceeds ${MAX_XML_TESTCASES}`);
+    }
+    totals.tests += 1;
+    if (testcase.failureKind === 'failure') totals.failures += 1;
+    if (testcase.failureKind === 'error') totals.errors += 1;
+    if (testcase.skipped) totals.skipped += 1;
+    testcases.push(testcase);
+    return true;
+  };
+
+  const suiteMatchesDeclarations = (frame) => {
+    for (const name of ['tests', 'failures', 'errors', 'skipped']) {
+      const declared = parseDeclaredCount(frame.attributes, name);
+      if (Number.isNaN(declared)) return false;
+      if (declared !== null && declared !== totals[name] - frame.startTotals[name]) return false;
+    }
+    return true;
+  };
+
+  while (position < xml.length) {
+    const nextTag = xml.indexOf('<', position);
+    const textEnd = nextTag === -1 ? xml.length : nextTag;
+    if (!hasValidXmlEntities(xml.slice(position, textEnd))) return null;
+    if (stack.length === 0 && xml.slice(position, textEnd).trim() !== '') return null;
+    if (nextTag === -1) {
+      position = xml.length;
+      break;
+    }
+    position = nextTag;
+
+    if (xml.startsWith('<!--', position)) {
+      const end = xml.indexOf('-->', position + 4);
+      if (end === -1) return null;
+      position = end + 3;
+      continue;
+    }
+    if (xml.startsWith('<![CDATA[', position)) {
+      if (stack.length === 0) return null;
+      const end = xml.indexOf(']]>', position + 9);
+      if (end === -1) return null;
+      position = end + 3;
+      continue;
+    }
+    if (xml.startsWith('<?', position)) {
+      const end = xml.indexOf('?>', position + 2);
+      if (end === -1) return null;
+      position = end + 2;
+      continue;
+    }
+    if (xml.startsWith('<!', position)) return null;
+
+    const tag = readXmlTag(xml, position);
+    if (!tag) return null;
+    position = tag.end;
+
+    if (tag.kind === 'close') {
+      const frame = stack.pop();
+      if (!frame || frame.name !== tag.name) return null;
+      if (frame.name === 'testcase') {
+        if (currentTestcase !== frame.testcase || !finishTestcase(frame.testcase)) return null;
+        currentTestcase = null;
+      }
+      if (frame.suite && !suiteMatchesDeclarations(frame)) return null;
+      if (stack.length === 0) rootClosed = true;
+      continue;
+    }
+
+    if (stack.length === 0) {
+      if (rootSeen || !['testsuite', 'testsuites'].includes(tag.name)) return null;
+      rootSeen = true;
+    }
+    if (!isAllowedJUnitElement(tag.name, stack)) return null;
+    elementCount += 1;
+    if (elementCount > MAX_XML_ELEMENTS) resourceLimit(`XML element count exceeds ${MAX_XML_ELEMENTS}`);
+
+    const frame = { name: tag.name };
+    if (tag.name === 'testsuite' || tag.name === 'testsuites') {
+      frame.suite = true;
+      frame.attributes = tag.attributes;
+      frame.startTotals = { ...totals };
+    }
+    if (tag.name === 'testcase') {
+      if (currentTestcase) return null;
+      const hasStatus = Object.hasOwn(tag.attributes, 'status');
+      const normalizedStatus = hasStatus
+        ? tag.attributes.status.trim().toLowerCase().replace(/[\s_-]+/g, '')
+        : '';
+      const hasDisabled = Object.hasOwn(tag.attributes, 'disabled');
+      const normalizedDisabled = hasDisabled ? tag.attributes.disabled.trim().toLowerCase() : '';
+      if (hasStatus && ![
+        'run', 'passed', 'pass', 'success', 'successful',
+        'notrun', 'disabled', 'pending', 'skipped', 'ignored',
+        'failed', 'failure', 'error',
+      ].includes(normalizedStatus)) return null;
+      if (hasDisabled && !['true', '1', 'yes', 'false', '0', 'no'].includes(normalizedDisabled)) return null;
+      const statusSkipped = ['notrun', 'disabled', 'pending', 'skipped', 'ignored'].includes(normalizedStatus);
+      const disabled = ['true', '1', 'yes'].includes(normalizedDisabled);
+      const explicitPassed = ['passed', 'pass', 'success', 'successful'].includes(normalizedStatus);
+      const statusFailureKind = ['failed', 'failure'].includes(normalizedStatus)
+        ? 'failure'
+        : normalizedStatus === 'error' ? 'error' : null;
+      if (explicitPassed && (statusSkipped || disabled || statusFailureKind)) return null;
+      currentTestcase = {
+        title: decodeXml(tag.attributes.name || 'unknown test'),
+        failureKind: statusFailureKind,
+        skipped: statusSkipped || disabled,
+        explicitPassed,
+        message: '',
+      };
+      frame.testcase = currentTestcase;
+    } else if (tag.name === 'failure' || tag.name === 'error') {
+      if (!currentTestcase || currentTestcase.explicitPassed ||
+        (currentTestcase.failureKind && currentTestcase.failureKind !== tag.name)) return null;
+      currentTestcase.failureKind = tag.name;
+      if (!currentTestcase.message) currentTestcase.message = decodeXml(tag.attributes.message || '');
+    } else if (tag.name === 'skipped') {
+      if (!currentTestcase || currentTestcase.explicitPassed || currentTestcase.failureKind) return null;
+      currentTestcase.skipped = true;
+    }
+
+    if (tag.selfClosing) {
+      if (frame.name === 'testcase') {
+        if (!finishTestcase(frame.testcase)) return null;
+        currentTestcase = null;
+      }
+      if (frame.suite && !suiteMatchesDeclarations(frame)) return null;
+      if (stack.length === 0) rootClosed = true;
+    } else {
+      if (stack.length >= MAX_XML_NESTING_DEPTH) {
+        resourceLimit(`XML nesting exceeds ${MAX_XML_NESTING_DEPTH}`);
+      }
+      stack.push(frame);
+    }
+  }
+
+  if (!rootSeen || !rootClosed || stack.length > 0 || currentTestcase) return null;
+  return testcases;
+}
+
+// JUnit XML: a nested <failure>/<error> means failed, <skipped> means skipped,
+// otherwise passed. Returns how many structurally valid testcases were seen.
 function visitJUnit(xml, counts, failures, detailCounts) {
-  // Strip XML comments so a commented-out testcase is not counted, then use a
-  // lazy attribute match so a self-closing `<testcase .../>` ends its own match
-  // instead of backtracking into the next testcase's closing tag.
-  const stripped = xml.replace(/<!--[\s\S]*?-->/g, '');
-  const testcases = stripped.match(/<testcase\b[^>]*?(?:\/>|>[\s\S]*?<\/testcase>)/g) || [];
+  let testcases;
+  try {
+    testcases = parseJUnit(xml);
+  } catch (error) {
+    if (error.code === 'REPORT_RESOURCE_LIMIT') return { seen: 0, resourceWarning: error.message };
+    throw error;
+  }
+  if (!testcases) return { seen: 0 };
   for (const testcase of testcases) {
-    const title = decodeXml(testcase.match(/\bname="([^"]*)"/)?.[1] || 'unknown test');
-    if (/<(failure|error)\b/.test(testcase)) {
+    if (testcase.failureKind) {
       counts.failed += 1;
       recordFailure(failures, detailCounts, {
-        title,
+        title: testcase.title,
         status: 'failed',
-        message: decodeXml(testcase.match(/<(?:failure|error)\b[^>]*\bmessage="([^"]*)"/)?.[1] || ''),
+        message: testcase.message,
       });
-    } else if (/<skipped\b/.test(testcase)) {
+    } else if (testcase.skipped) {
       counts.skipped += 1;
     } else {
       counts.passed += 1;
     }
   }
-  return testcases.length;
+  return { seen: testcases.length };
 }
 
 function findTitle(stack) {
@@ -311,22 +669,32 @@ function findTitle(stack) {
 
 function visit(value, counts, failures, artifacts, detailCounts, stack = []) {
   if (Array.isArray(value)) {
-    for (const item of value) visit(item, counts, failures, artifacts, detailCounts, stack);
-    return;
+    return value.reduce(
+      (seen, item) => seen + visit(item, counts, failures, artifacts, detailCounts, stack),
+      0,
+    );
   }
-  if (!value || typeof value !== 'object') return;
+  if (!value || typeof value !== 'object') return 0;
   const nextStack = value.title ? [...stack, value] : stack;
   const status = String(value.status || value.outcome || '').toLowerCase();
-  if (['passed', 'pass', 'ok'].includes(status) || value.ok === true) counts.passed += 1;
+  let seen = 0;
+  if (['passed', 'pass', 'ok'].includes(status) || value.ok === true) {
+    counts.passed += 1;
+    seen += 1;
+  }
   if (['failed', 'fail', 'timedout', 'interrupted'].includes(status) || value.ok === false) {
     counts.failed += 1;
+    seen += 1;
     recordFailure(failures, detailCounts, {
       title: findTitle(nextStack),
       status: status === 'timedout' || status === 'interrupted' ? status : 'failed',
       message: value.error?.message || value.message || '',
     });
   }
-  if (['skipped', 'pending'].includes(status)) counts.skipped += 1;
+  if (['skipped', 'pending'].includes(status)) {
+    counts.skipped += 1;
+    seen += 1;
+  }
   if (Array.isArray(value.results) && value.results.length > 1) counts.retried += 1;
   if (Array.isArray(value.attachments)) {
     for (const item of value.attachments) {
@@ -338,7 +706,10 @@ function visit(value, counts, failures, artifacts, detailCounts, stack = []) {
       }
     }
   }
-  for (const child of Object.values(value)) visit(child, counts, failures, artifacts, detailCounts, nextStack);
+  for (const child of Object.values(value)) {
+    seen += visit(child, counts, failures, artifacts, detailCounts, nextStack);
+  }
+  return seen;
 }
 
 const files = collectReportFiles(target).sort();
@@ -359,39 +730,53 @@ for (const file of files) {
     continue;
   }
   reportBytesRead += readResult.bytesRead;
-  if (file.endsWith('.xml')) {
-    const seen = visitJUnit(readResult.content, counts, failures, detailCounts);
-    if (seen > 0) xmlFilesRead += 1;
-    else unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
+  if (/\.xml$/i.test(file)) {
+    const result = visitJUnit(readResult.content, counts, failures, detailCounts);
+    if (result.resourceWarning) {
+      addResourceWarning(`${result.resourceWarning}: ${displayDiscoveredReport(file)}`);
+      continue;
+    }
+    if (result.seen > 0) xmlFilesRead += 1;
+    else unsupported.push(sanitizeOutputText(displayDiscoveredReport(file)));
     continue;
   }
   try {
-    visit(JSON.parse(readResult.content), counts, failures, artifacts, detailCounts);
-    jsonFilesRead += 1;
+    const structure = inspectJsonStructure(readResult.content);
+    if (!structure.ok) {
+      addResourceWarning(`${structure.reason}: ${displayDiscoveredReport(file)}`);
+      continue;
+    }
+    const seen = visit(JSON.parse(readResult.content), counts, failures, artifacts, detailCounts);
+    if (seen > 0) jsonFilesRead += 1;
+    else unsupported.push(sanitizeOutputText(displayDiscoveredReport(file)));
   } catch {
-    unsupported.push(sanitizeOutputText(path.relative(process.cwd(), file)));
+    unsupported.push(sanitizeOutputText(displayDiscoveredReport(file)));
   }
 }
 
 const filesRead = jsonFilesRead + xmlFilesRead;
 const resourceIncomplete = resourceWarnings.length > 0;
 const parseIncomplete = unsupported.length > 0;
-const incomplete = resourceIncomplete || parseIncomplete;
+const noReportsDiscovered = files.length === 0;
+const incomplete = resourceIncomplete || parseIncomplete || noReportsDiscovered;
 const safeResourceWarnings = resourceWarnings.map(sanitizeOutputText);
 const nextAction = resourceIncomplete
   ? 'Report summary is incomplete because resource or safety limits were reached; review resourceWarnings and rerun with a narrower report set.'
+  : noReportsDiscovered
+    ? 'Report summary is incomplete because no supported JSON/XML reports were discovered; verify the report path and test-run artifacts.'
   : parseIncomplete
     ? 'Report summary is incomplete because one or more discovered reports were unsupported or could not be parsed; inspect unsupported and regenerate those reports.'
   : counts.failed > 0
     ? 'Inspect failure artifacts and classify with flake-triage.md.'
     : 'Review coverage gaps and decide next automation candidates.';
 const summary = {
-  reportPath: sanitizeOutputText(target),
+  reportPath: sanitizeOutputText(displayReportPath(target)),
   filesDiscovered: files.length,
   filesRead,
   filesSkipped: files.length - filesRead,
   filesTruncated: resourceIncomplete,
   incomplete,
+  noReportsDiscovered,
   resourceWarnings: safeResourceWarnings,
   jsonFilesRead,
   xmlFilesRead,
@@ -421,6 +806,7 @@ if (format === 'md') {
 - Files skipped: ${summary.filesSkipped}
 - Files truncated: ${summary.filesTruncated}
 - Incomplete: ${summary.incomplete}
+- No reports discovered: ${summary.noReportsDiscovered}
 - Resource warnings: ${summary.resourceWarnings.length ? summary.resourceWarnings.map(escapeMarkdown).join('; ') : 'none'}
 - Unsupported reports: ${summary.unsupported.length ? summary.unsupported.map(escapeMarkdown).join(', ') : 'none'}
 - JSON files read: ${summary.jsonFilesRead}

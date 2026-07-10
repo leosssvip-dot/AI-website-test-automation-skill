@@ -92,4 +92,3 @@ git diff --check
 ```
 
 Then review the diff, update the task record and `docs/PROGRESS.md`, sync the installed copy only after all checks pass, and verify directory parity.
-

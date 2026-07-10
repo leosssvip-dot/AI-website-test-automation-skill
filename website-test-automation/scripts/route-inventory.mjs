@@ -178,10 +178,29 @@ function readRouteSource(file) {
   }
 }
 
+function canStartRegexLiteral(source, index) {
+  let previous = index - 1;
+  while (previous >= 0 && /\s/.test(source[previous])) previous -= 1;
+  if (previous < 0 || /[=([{,:;!&|?+*%^~<>-]/.test(source[previous])) return true;
+  if (source[previous] === ')') {
+    let depth = 1;
+    let cursor = previous - 1;
+    while (cursor >= 0 && depth > 0) {
+      if (source[cursor] === ')') depth += 1;
+      else if (source[cursor] === '(') depth -= 1;
+      cursor -= 1;
+    }
+    if (depth === 0 && /\b(?:if|while|for|with|catch)\s*$/.test(source.slice(0, cursor + 1))) return true;
+  }
+  const keyword = source.slice(0, index).match(/([A-Za-z_$][\w$]*)\s*$/)?.[1];
+  return ['return', 'throw', 'case', 'delete', 'void', 'typeof', 'yield', 'await', 'in', 'of', 'else', 'do'].includes(keyword);
+}
+
 function sanitizeJavaScript(source, { maskStrings = false } = {}) {
   let output = '';
   let state = 'code';
   let quote = null;
+  let regexCharacterClass = false;
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
     const next = source[index + 1];
@@ -217,6 +236,32 @@ function sanitizeJavaScript(source, { maskStrings = false } = {}) {
       }
       continue;
     }
+    if (state === 'regex') {
+      if (char === '\\' && next !== undefined) {
+        output += '  ';
+        index += 1;
+      } else if (char === '[') {
+        regexCharacterClass = true;
+        output += ' ';
+      } else if (char === ']' && regexCharacterClass) {
+        regexCharacterClass = false;
+        output += ' ';
+      } else if (char === '/' && !regexCharacterClass) {
+        output += ' ';
+        while (/[A-Za-z]/.test(source[index + 1] || '')) {
+          output += ' ';
+          index += 1;
+        }
+        state = 'code';
+      } else if (char === '\n' || char === '\r') {
+        output += char;
+        state = 'code';
+        regexCharacterClass = false;
+      } else {
+        output += ' ';
+      }
+      continue;
+    }
     if (char === '/' && next === '/') {
       output += '  ';
       index += 1;
@@ -229,11 +274,40 @@ function sanitizeJavaScript(source, { maskStrings = false } = {}) {
       output += maskStrings ? ' ' : char;
       state = 'string';
       quote = char;
+    } else if (char === '/' && maskStrings && canStartRegexLiteral(output, index)) {
+      output += ' ';
+      state = 'regex';
+      regexCharacterClass = false;
     } else {
       output += char;
     }
   }
   return output;
+}
+
+function readStaticStringAt(source, start) {
+  let index = start;
+  while (/\s/.test(source[index] || '')) index += 1;
+  const quote = source[index];
+  if (quote !== '"' && quote !== "'" && quote !== '`') return null;
+  index += 1;
+  let value = '';
+  while (index < source.length) {
+    const character = source[index];
+    if (character === quote) return { value, end: index + 1 };
+    if (quote === '`' && character === '$' && source[index + 1] === '{') return null;
+    if (character === '\\') {
+      const escaped = source[index + 1];
+      if (!['\\', '/', '"', "'", '`'].includes(escaped)) return null;
+      value += escaped;
+      index += 2;
+      continue;
+    }
+    if ((character === '\n' || character === '\r') && quote !== '`') return null;
+    value += character;
+    index += 1;
+  }
+  return null;
 }
 
 const routes = [];
@@ -265,6 +339,10 @@ const toApiRoutePath = (raw) => {
   return nested === '/' ? '/api' : `/api${nested}`;
 };
 const toPagesRoutePath = (raw) => toRoutePath(raw.replace(/(^|\/)index$/, ''));
+const staticHtmlExcludedSegments = new Set([
+  'public', 'static', 'tests', 'test', '__tests__', 'fixtures', 'fixture',
+  'mocks', 'mock', 'src', 'app', 'pages', 'components', 'examples', 'docs',
+]);
 const projectRootCache = new Map();
 
 function hasSafePackageBoundary(directory) {
@@ -309,12 +387,17 @@ for (const file of routeFiles) {
   const projectRel = path.relative(projectRoot, file).replaceAll(path.sep, '/');
   const content = readRouteSource(file);
   if (content === null) continue;
-  const uncommented = sanitizeJavaScript(content);
   const methodSource = sanitizeJavaScript(content, { maskStrings: true });
 
   if (/\.html$/.test(rel)) {
-    const raw = rel.replace(/\.html$/, '').replace(/(^|\/)index$/, '');
-    add('static-html-route', '/' + raw, file, 'medium');
+    const segments = projectRel.split('/');
+    const underNonRouteRoot = segments.slice(0, -1).some((segment) => staticHtmlExcludedSegments.has(segment));
+    if (underNonRouteRoot) {
+      addNote(`Skipped static HTML asset outside supported route roots: ${projectRel}`);
+    } else {
+      const raw = projectRel.replace(/\.html$/, '').replace(/(^|\/)index$/, '');
+      add('static-html-route', '/' + raw, file, 'medium');
+    }
   }
 
   const appPageMatch = projectRel.match(/^(?:src\/)?app\/(?:(.*)\/)?page\.(tsx?|jsx?)$/);
@@ -345,12 +428,27 @@ for (const file of routeFiles) {
     add('nuxt-pages-route', toPagesRoutePath(nuxtPagesMatch[1]), file, 'high');
   }
 
-  for (const match of uncommented.matchAll(/\b(?:app|router)\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/g)) {
-    add('server-route', `${match[1].toUpperCase()} ${match[2]}`, file, 'medium');
+  for (const match of methodSource.matchAll(/\b(?:app|router)\.(get|post|put|patch|delete)\(/g)) {
+    const literal = readStaticStringAt(content, match.index + match[0].length);
+    if (!literal) continue;
+    let nextIndex = literal.end;
+    while (/\s/.test(content[nextIndex] || '')) nextIndex += 1;
+    if (![',', ')'].includes(content[nextIndex])) continue;
+    add('server-route', `${match[1].toUpperCase()} ${literal.value}`, file, 'medium');
   }
 
-  for (const match of uncommented.matchAll(/\b(?:Route\s+path=|path:\s*)['"`]([^'"`]+)['"`]/g)) {
-    add('client-route', match[1], file, 'low');
+  const clientRouteStructures = [
+    ...[...methodSource.matchAll(/<Route\b[^>\n]*?\bpath\s*=/g)].map((match) => ({ match, kind: 'jsx' })),
+    ...[...methodSource.matchAll(/\bpath\s*:/g)].map((match) => ({ match, kind: 'object' })),
+  ].sort((left, right) => left.match.index - right.match.index);
+  for (const { match, kind } of clientRouteStructures) {
+    const literal = readStaticStringAt(content, match.index + match[0].length);
+    if (!literal) continue;
+    let nextIndex = literal.end;
+    while (/\s/.test(content[nextIndex] || '')) nextIndex += 1;
+    if (content[nextIndex] === '+') continue;
+    if (kind === 'object' && ![',', '}', ']'].includes(content[nextIndex])) continue;
+    add('client-route', literal.value, file, 'low');
   }
 }
 

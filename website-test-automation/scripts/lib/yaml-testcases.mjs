@@ -16,6 +16,18 @@ const VALID_EXT = /\.(ya?ml|json)$/i;
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
 const BLOCK_SCALAR_MARKER = /^[|>](?:(?:[+-][1-9]?)|(?:[1-9][+-]?))?$/;
 const ANCHOR_OR_ALIAS = /^[&*][^\s,[\]{}]+(?:\s|$)/;
+export const CASE_RESOURCE_LIMITS = Object.freeze({
+  maxFileBytes: 2 * 1024 * 1024,
+  maxTotalBytes: 32 * 1024 * 1024,
+  maxFiles: 1_000,
+  maxDirectories: 5_000,
+  maxEntries: 20_000,
+});
+const collectedFileMetadata = new Map();
+
+export function createCaseLoadBudget() {
+  return { bytesRead: 0 };
+}
 
 function indentOf(line) {
   return line.match(/^(\s*)/)[1].replace(/\t/g, '  ').length;
@@ -158,6 +170,7 @@ function parseFlowMap(value) {
     const colon = findTopLevelColon(part);
     if (colon === -1) throw new Error('Malformed flow mapping entry: missing colon');
     const key = parseKey(part.slice(0, colon));
+    if (Object.hasOwn(map, key)) throw new Error(`Duplicate mapping key: ${key}`);
     map[key] = parseScalar(part.slice(colon + 1));
   }
   return map;
@@ -227,6 +240,7 @@ function parseLines(lines) {
     const colon = line.indexOf(':');
     if (colon === -1) throw new Error('Malformed mapping entry: missing colon');
     const key = parseKey(line.slice(0, colon));
+    if (Object.hasOwn(map, key)) throw new Error(`Duplicate mapping key: ${key}`);
     const inline = line.slice(colon + 1).trim();
     if (inline !== '') {
       map[key] = parseScalar(inline);
@@ -265,11 +279,75 @@ export function parseDocument(text) {
   return cases;
 }
 
-export function loadCases(file) {
+function readBoundedUtf8(fd, maxBytes, label) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+    if (bytesRead === 0) break;
+    chunks.push(buffer.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  if (total > maxBytes) throw new Error(`Input exceeds the ${maxBytes}-byte (2 MiB) file limit: ${label}`);
+  return { text: Buffer.concat(chunks, total).toString('utf8'), bytes: total };
+}
+
+function isContained(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function readCaseText(file, loadBudget, metadata = null) {
+  const budget = loadBudget && typeof loadBudget === 'object' ? loadBudget : createCaseLoadBudget();
+  if (!Number.isFinite(budget.bytesRead) || budget.bytesRead < 0) throw new Error('Invalid case-load resource budget');
+
   const stat = fs.lstatSync(file);
   if (stat.isSymbolicLink()) throw new Error(`Input path is a symbolic link: ${file}`);
   if (!stat.isFile()) throw new Error(`Input must be a regular file: ${file}`);
-  const text = fs.readFileSync(file, 'utf8');
+  const realBeforeOpen = fs.realpathSync(file);
+  if (metadata) {
+    const sameCollectedFile = stat.dev === metadata.dev && stat.ino === metadata.ino &&
+      realBeforeOpen === metadata.canonicalPath && isContained(metadata.containmentRoot, realBeforeOpen);
+    if (!sameCollectedFile) throw new Error(`Input or its parent changed after collection: ${file}`);
+  }
+  if (stat.size > CASE_RESOURCE_LIMITS.maxFileBytes) {
+    throw new Error(`Input exceeds the ${CASE_RESOURCE_LIMITS.maxFileBytes}-byte (2 MiB) file limit: ${file}`);
+  }
+
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const openedStat = fs.fstatSync(fd);
+    const currentStat = fs.lstatSync(file);
+    const sameFile = openedStat.isFile() && currentStat.isFile() && !currentStat.isSymbolicLink() &&
+      stat.dev === openedStat.dev && stat.ino === openedStat.ino &&
+      currentStat.dev === openedStat.dev && currentStat.ino === openedStat.ino;
+    const realAfterOpen = fs.realpathSync(file);
+    const sameCollectedPath = !metadata ||
+      (realAfterOpen === metadata.canonicalPath && isContained(metadata.containmentRoot, realAfterOpen));
+    if (!sameFile || !sameCollectedPath) throw new Error(`Input or its parent changed during inspection: ${file}`);
+    if (openedStat.size > CASE_RESOURCE_LIMITS.maxFileBytes) {
+      throw new Error(`Input exceeds the ${CASE_RESOURCE_LIMITS.maxFileBytes}-byte (2 MiB) file limit: ${file}`);
+    }
+    const readResult = readBoundedUtf8(fd, CASE_RESOURCE_LIMITS.maxFileBytes, file);
+    if (budget.bytesRead + readResult.bytes > CASE_RESOURCE_LIMITS.maxTotalBytes) {
+      throw new Error(`Case inputs exceed the ${CASE_RESOURCE_LIMITS.maxTotalBytes}-byte (32 MiB) aggregate limit`);
+    }
+    budget.bytesRead += readResult.bytes;
+    return readResult.text;
+  } catch (error) {
+    if (error.code === 'ELOOP') throw new Error(`Input path is a symbolic link: ${file}`);
+    throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+export function loadCases(file, loadBudget = createCaseLoadBudget()) {
+  const resolved = path.resolve(file);
+  const text = readCaseText(resolved, loadBudget, collectedFileMetadata.get(resolved) || null);
   if (/\.json$/i.test(file)) {
     const parsed = JSON.parse(text);
     assertSafeJsonKeys(parsed);
@@ -281,7 +359,85 @@ export function loadCases(file) {
 // Resolves files and directories to a unique list of regular YAML/JSON case files.
 // Direct symbolic links and unsupported files are rejected; directory scans skip links.
 export function collectCaseFiles(targets) {
-  const out = [];
+  const out = new Map();
+  let declaredBytes = 0;
+  let directoryCount = 0;
+  let entryCount = 0;
+
+  const addFile = (file, stat, containmentRoot) => {
+    if (stat.size > CASE_RESOURCE_LIMITS.maxFileBytes) {
+      throw new Error(`Input exceeds the ${CASE_RESOURCE_LIMITS.maxFileBytes}-byte (2 MiB) file limit: ${file}`);
+    }
+    const canonical = fs.realpathSync(file);
+    if (out.has(canonical)) return;
+    if (out.size >= CASE_RESOURCE_LIMITS.maxFiles) {
+      throw new Error(`Case file count exceeds the ${CASE_RESOURCE_LIMITS.maxFiles}-file limit`);
+    }
+    if (declaredBytes + stat.size > CASE_RESOURCE_LIMITS.maxTotalBytes) {
+      throw new Error(`Case inputs exceed the ${CASE_RESOURCE_LIMITS.maxTotalBytes}-byte (32 MiB) aggregate limit`);
+    }
+    declaredBytes += stat.size;
+    const resolved = path.resolve(file);
+    out.set(canonical, resolved);
+    collectedFileMetadata.set(resolved, {
+      canonicalPath: canonical,
+      containmentRoot,
+      dev: stat.dev,
+      ino: stat.ino,
+    });
+  };
+
+  const scanDirectory = (target) => {
+    const scanRoot = fs.realpathSync(target);
+    const pending = [scanRoot];
+    while (pending.length > 0) {
+      const directory = pending.pop();
+      directoryCount += 1;
+      if (directoryCount > CASE_RESOURCE_LIMITS.maxDirectories) {
+        throw new Error(`Case directory count exceeds the ${CASE_RESOURCE_LIMITS.maxDirectories}-directory limit`);
+      }
+      const directoryStat = fs.lstatSync(directory);
+      if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory() || !isContained(scanRoot, fs.realpathSync(directory))) {
+        throw new Error(`Unsafe case directory: ${directory}`);
+      }
+
+      let handle;
+      const entries = [];
+      try {
+        handle = fs.opendirSync(directory);
+        while (true) {
+          const entry = handle.readSync();
+          if (!entry) break;
+          entryCount += 1;
+          if (entryCount > CASE_RESOURCE_LIMITS.maxEntries) {
+            throw new Error(`Case directory entries exceed the ${CASE_RESOURCE_LIMITS.maxEntries}-entry limit`);
+          }
+          entries.push(entry);
+        }
+      } finally {
+        if (handle) handle.closeSync();
+      }
+
+      const childDirectories = [];
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        if (IGNORED_DIRS.has(entry.name)) continue;
+        const full = path.join(directory, entry.name);
+        const stat = fs.lstatSync(full);
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) {
+          const realDirectory = fs.realpathSync(full);
+          if (!isContained(scanRoot, realDirectory)) throw new Error(`Case directory escapes the scan root: ${full}`);
+          childDirectories.push(realDirectory);
+        } else if (stat.isFile() && VALID_EXT.test(entry.name)) {
+          const realFile = fs.realpathSync(full);
+          if (!isContained(scanRoot, realFile)) throw new Error(`Case file escapes the scan root: ${full}`);
+          addFile(full, stat, scanRoot);
+        }
+      }
+      for (const child of childDirectories.reverse()) pending.push(child);
+    }
+  };
+
   for (const target of targets) {
     const resolved = path.resolve(target);
     let stat;
@@ -296,20 +452,12 @@ export function collectCaseFiles(targets) {
       if (!VALID_EXT.test(path.basename(resolved))) {
         throw new Error(`Input must be a supported YAML/JSON file: ${resolved}`);
       }
-      out.push(resolved);
+      const canonical = fs.realpathSync(resolved);
+      addFile(resolved, stat, path.dirname(canonical));
       continue;
     }
     if (!stat.isDirectory()) throw new Error(`Input must be a regular file or directory: ${resolved}`);
-
-    const walk = (dir) => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) walk(full);
-        else if (entry.isFile() && VALID_EXT.test(entry.name)) out.push(full);
-      }
-    };
-    walk(resolved);
+    scanDirectory(resolved);
   }
-  return [...new Set(out)];
+  return [...out.values()].sort();
 }

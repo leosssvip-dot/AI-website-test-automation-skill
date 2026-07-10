@@ -26,6 +26,8 @@ const evidenceDirectories = new Set(['real-project-validation', 'forward-test-re
 const maxTextFileBytes = 2 * 1024 * 1024;
 const resourceLimits = Object.freeze({
   maxScannedFiles: 10_000,
+  maxScannedDirectories: 10_000,
+  maxScannedEntries: 50_000,
   maxTotalScoredTextBytes: 32 * 1024 * 1024,
   maxManifestCandidates: 20,
   maxProjectsPerManifest: 100,
@@ -37,7 +39,9 @@ const files = [];
 const safeManifestCandidates = [];
 const unsafeManifestCandidates = [];
 const resourceWarnings = [];
-let scanFileLimitExceeded = false;
+let scanStopped = false;
+let scannedDirectoryCount = 0;
+let scannedEntryCount = 0;
 
 const rel = (file) => path.relative(rootRealPath, file).replaceAll(path.sep, '/');
 
@@ -97,52 +101,134 @@ function inspectContainedRegularFile(file, maxBytes = maxTextFileBytes) {
   }
 }
 
-function walk(dir) {
-  if (scanFileLimitExceeded) return;
-  let entries;
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true })
-      .sort((left, right) => left.name.localeCompare(right.name));
-  } catch {
-    return;
+function readBoundedUtf8(fd, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+    if (bytesRead === 0) break;
+    chunks.push(buffer.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  if (total > maxBytes) return { ok: false, reason: `file exceeds the ${maxBytes}-byte text limit` };
+  return { ok: true, content: Buffer.concat(chunks, total).toString('utf8'), bytes: total };
+}
+
+function readContainedRegularTextFile(file, maxBytes = maxTextFileBytes, expectedStats = null) {
+  const inspection = inspectContainedRegularFile(file, maxBytes);
+  if (!inspection.ok) return inspection;
+  if (expectedStats && (inspection.stats.dev !== expectedStats.dev || inspection.stats.ino !== expectedStats.ino)) {
+    return { ok: false, reason: 'file changed during inspection' };
   }
 
-  for (const entry of entries) {
-    if (scanFileLimitExceeded) return;
-    if (ignored.has(entry.name)) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isSymbolicLink()) {
-      recordManifestCandidate(full, 'manifest path is a symbolic link');
-      continue;
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const openedStats = fs.fstatSync(fd);
+    const currentStats = fs.lstatSync(file);
+    const sameFile = openedStats.isFile() && currentStats.isFile() && !currentStats.isSymbolicLink() &&
+      openedStats.dev === inspection.stats.dev && openedStats.ino === inspection.stats.ino &&
+      currentStats.dev === openedStats.dev && currentStats.ino === openedStats.ino;
+    if (!sameFile || !isRootContained(fs.realpathSync(file))) {
+      return { ok: false, reason: 'file changed during inspection' };
     }
-    try {
-      const stats = fs.lstatSync(full);
+    const readResult = readBoundedUtf8(fd, maxBytes);
+    return readResult.ok ? { ...readResult, stats: openedStats } : readResult;
+  } catch (error) {
+    return { ok: false, reason: error.code === 'ELOOP' ? 'path contains a symbolic link' : 'file is unreadable' };
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function readDirectoryEntries(directory) {
+  let handle;
+  const entries = [];
+  try {
+    const stats = fs.lstatSync(directory);
+    if (stats.isSymbolicLink() || !stats.isDirectory() || !isRootContained(fs.realpathSync(directory))) return entries;
+    handle = fs.opendirSync(directory);
+    while (!scanStopped) {
+      const entry = handle.readSync();
+      if (!entry) break;
+      scannedEntryCount += 1;
+      if (scannedEntryCount > resourceLimits.maxScannedEntries) {
+        scanStopped = true;
+        addResourceWarning(`Scanned entry budget exceeded ${resourceLimits.maxScannedEntries}; remaining entries were ignored.`);
+        break;
+      }
+      entries.push(entry);
+    }
+  } catch {
+    addResourceWarning(`Unreadable directory was skipped: ${rel(directory)}`);
+  } finally {
+    if (handle) {
+      try {
+        handle.closeSync();
+      } catch {
+        // A close race must not hide the bounded scan result.
+      }
+    }
+  }
+  return entries.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function walk() {
+  const pending = [rootRealPath];
+  while (pending.length > 0 && !scanStopped) {
+    const directory = pending.pop();
+    scannedDirectoryCount += 1;
+    if (scannedDirectoryCount > resourceLimits.maxScannedDirectories) {
+      scanStopped = true;
+      addResourceWarning(`Scanned directory budget exceeded ${resourceLimits.maxScannedDirectories}; remaining directories were ignored.`);
+      break;
+    }
+    const childDirectories = [];
+    for (const entry of readDirectoryEntries(directory)) {
+      if (scanStopped) break;
+      if (ignored.has(entry.name)) continue;
+      const full = path.join(directory, entry.name);
+      let stats;
+      try {
+        stats = fs.lstatSync(full);
+      } catch {
+        continue;
+      }
       if (stats.isSymbolicLink()) {
         recordManifestCandidate(full, 'manifest path is a symbolic link');
         continue;
       }
       if (stats.isDirectory()) {
-        const realDirectory = fs.realpathSync(full);
-        if (isRootContained(realDirectory)) walk(realDirectory);
-      } else if (stats.isFile()) {
-        const realFile = fs.realpathSync(full);
-        if (isRootContained(realFile)) {
-          recordManifestCandidate(full);
-          if (files.length >= resourceLimits.maxScannedFiles) {
-            scanFileLimitExceeded = true;
-            addResourceWarning(`Scanned file budget exceeded ${resourceLimits.maxScannedFiles}; remaining entries were ignored.`);
-            return;
-          }
-          files.push(full);
+        try {
+          const realDirectory = fs.realpathSync(full);
+          if (isRootContained(realDirectory)) childDirectories.push(realDirectory);
+        } catch {
+          // Ignore directories that disappear or become unreadable during traversal.
         }
+        continue;
       }
-    } catch {
-      // Ignore entries that disappear or become unreadable during traversal.
+      if (!stats.isFile()) continue;
+      try {
+        const realFile = fs.realpathSync(full);
+        if (!isRootContained(realFile)) continue;
+        recordManifestCandidate(full);
+        if (files.length >= resourceLimits.maxScannedFiles) {
+          scanStopped = true;
+          addResourceWarning(`Scanned file budget exceeded ${resourceLimits.maxScannedFiles}; remaining entries were ignored.`);
+          break;
+        }
+        files.push(full);
+      } catch {
+        // Ignore files that disappear or become unreadable during traversal.
+      }
     }
+    for (const child of childDirectories.reverse()) pending.push(child);
   }
 }
 
-walk(rootRealPath);
+walk();
 
 const scorableFiles = [];
 const textChunks = [];
@@ -151,7 +237,10 @@ let scoredTextFileCount = 0;
 let skippedScoredTextFiles = 0;
 for (const file of files) {
   const inspection = inspectContainedRegularFile(file);
-  if (!inspection.ok) continue;
+  if (!inspection.ok) {
+    addResourceWarning('One or more scanned files became unsafe or unreadable before scoring.');
+    continue;
+  }
   const isText = /\.(md|ya?ml|json|mjs|js|ts|tsx|jsx|html)$/.test(file);
   if (!isText) {
     scorableFiles.push(file);
@@ -162,14 +251,21 @@ for (const file of files) {
     addResourceWarning(`Scored text budget exceeded ${resourceLimits.maxTotalScoredTextBytes} bytes (32 MiB); additional text files were ignored.`);
     continue;
   }
-  try {
-    textChunks.push(fs.readFileSync(file, 'utf8'));
-    scorableFiles.push(file);
-    scoredTextBytes += inspection.stats.size;
-    scoredTextFileCount += 1;
-  } catch {
-    // Ignore files that become unreadable after inspection.
+  const readResult = readContainedRegularTextFile(file, maxTextFileBytes, inspection.stats);
+  if (!readResult.ok) {
+    skippedScoredTextFiles += 1;
+    addResourceWarning('One or more scored text files became unsafe or unreadable during bounded reading.');
+    continue;
   }
+  if (scoredTextBytes + readResult.bytes > resourceLimits.maxTotalScoredTextBytes) {
+    skippedScoredTextFiles += 1;
+    addResourceWarning(`Scored text budget exceeded ${resourceLimits.maxTotalScoredTextBytes} bytes (32 MiB); additional text files were ignored.`);
+    continue;
+  }
+  textChunks.push(readResult.content);
+  scorableFiles.push(file);
+  scoredTextBytes += readResult.bytes;
+  scoredTextFileCount += 1;
 }
 const relFiles = scorableFiles.map(rel);
 const allText = textChunks.join('\n');
@@ -178,6 +274,8 @@ const resourceBudget = {
   limits: resourceLimits,
   usage: {
     scannedFileCount: files.length,
+    scannedDirectoryCount,
+    scannedEntryCount,
     scoredTextFileCount,
     scoredTextBytes,
     skippedScoredTextFiles,
@@ -282,13 +380,105 @@ const dimensions = [
 ];
 
 const placeholderPattern = /(?:^|[^A-Za-z0-9_./-])(?:todo|tbd|pending|placeholder|not[\s_-]+run|example[\s_-]*only|replace(?:[\s_-]+(?:me|this|later))?)(?=$|[^A-Za-z0-9_./-])/i;
+const resultUnitSource = '(?:test\\s+(?:cases?|files?)|tests?|checks?|assertions?|cases?|scenarios?|specs?|examples?|suites?|passes?|failures?|errors?)';
+const executionUnitSource = '(?:test\\s+(?:cases?|files?)|tests?|checks?|assertions?|cases?|scenarios?|specs?|examples?|suites?)';
 const concreteResultPatterns = [
-  { kind: 'verb', pattern: /\b(?:passed|failed|verified|observed|completed|succeeded)\b/gi, requiresContext: true },
-  { kind: 'metric', pattern: /\b\d+\s+(?:tests?|checks?|assertions?|cases?|passes?|failures?)\b/gi, requiresContext: false },
+  { kind: 'verb', pattern: /\b(?:passed|failed|verified|observed|completed|succeeded|executed|ran)\b/gi, requiresContext: true },
+  { kind: 'count', pattern: /\b[1-9]\d*\s+(?:passes?|failures?|errors?)\b/gi, requiresContext: false },
   { kind: 'metric', pattern: /\b(?:http(?:\s+status)?|status(?:\s+code)?|exit(?:\s+code)?)\s*[:=]?\s*\d{1,3}\b/gi, requiresContext: false },
 ];
 const expectationLanguagePattern = /\b(?:expect(?:ed|ation)?|should|will|plan(?:ned)?|target)\b/gi;
 const actualContextPattern = /\b(?:actual|observed|received|returned|recorded)\b/gi;
+const noExecutionPattern = new RegExp(
+  [
+    `\\b(?:${executionUnitSource}|command)\\s+(?:(?:was|were|is|are|has|have)\\s+)?not\\s+(?:run|executed|started)\\b`,
+    '\\bnot[\\s_-]+run\\b',
+    "\\b(?:did\\s+not|didn't|never)\\s+(?:run|execute|start)\\b",
+    `\\bno\\s+${executionUnitSource}\\s+(?:ran|were\\s+run|executed|started)\\b`,
+    `\\b(?:0|zero|no)\\s+${executionUnitSource}\\s+(?:(?:were|was)\\s+)?(?:run|ran|executed|started|completed)\\b`,
+    `\\b(?:with|having|had|reported?)\\s+(?:0|zero|no|none)\\s+(?:total\\s+)?${executionUnitSource}\\b(?!\\s+(?:passed|failed|passes?|failures?|errors?)\\b)`,
+    `\\b(?:0|zero|no|none)\\s+(?:total\\s+)?${executionUnitSource}(?:\\s+count)?(?!\\s+(?:passed|failed|passes?|failures?|errors?)\\b)`,
+    `\\b(?:total\\s+)?${executionUnitSource}(?:\\s+count)?\\s*(?::|=|-)?\\s*(?:0|zero|no|none)\\b`,
+    `\\bwithout\\s+(?:running|executing|starting)\\s+${executionUnitSource}\\b`,
+    '\\b(?:dry[\\s_-]*run|list[\\s_-]*only|enumerat(?:e|ion)[\\s_-]*only)\\b',
+    '(?:^|\\s)--list(?:\\s|$)',
+  ].join('|'),
+  'i',
+);
+const nonExecutionStatePattern = /\b(?:skipped|pending|disabled|blocked|ignored|collected|discovered|deselected|queued|scheduled|not[\s_-]+started)\b/i;
+
+function clauseAt(value, index) {
+  const before = value.slice(0, index);
+  const start = Math.max(
+    before.lastIndexOf('.'),
+    before.lastIndexOf(';'),
+    before.lastIndexOf(','),
+    before.lastIndexOf(':'),
+    before.lastIndexOf('!'),
+    before.lastIndexOf('?'),
+    before.lastIndexOf('\n'),
+  ) + 1;
+  const remaining = value.slice(index);
+  const boundaryOffsets = ['.', ';', ',', ':', '!', '?', '\n']
+    .map((boundary) => remaining.indexOf(boundary))
+    .filter((offset) => offset >= 0);
+  const end = boundaryOffsets.length ? index + Math.min(...boundaryOffsets) : value.length;
+  return { start, end, text: value.slice(start, end) };
+}
+
+function boundedSegmentAt(value, index, boundaries, radius = 256) {
+  const localStart = Math.max(0, index - radius);
+  const before = value.slice(localStart, index);
+  let boundary = -1;
+  for (const character of boundaries) boundary = Math.max(boundary, before.lastIndexOf(character));
+  const start = localStart + boundary + 1;
+  const localEnd = Math.min(value.length, index + radius);
+  const after = value.slice(index, localEnd);
+  const offsets = [...boundaries]
+    .map((character) => after.indexOf(character))
+    .filter((offset) => offset >= 0);
+  const end = offsets.length ? index + Math.min(...offsets) : localEnd;
+  return {
+    start,
+    end,
+    text: value.slice(start, end),
+    prefixTruncated: localStart > 0 && boundary === -1,
+  };
+}
+
+function boundedStatementAt(value, index) {
+  return boundedSegmentAt(value, index, new Set(['.', ';', ',', '!', '?', '\n']));
+}
+
+function boundedClauseAt(value, index) {
+  return boundedSegmentAt(value, index, new Set(['.', ';', ',', ':', '!', '?', '\n']));
+}
+
+function verbIsTiedToZeroCount(value, matchIndex, matchLength) {
+  const statement = boundedStatementAt(value, matchIndex);
+  const relativeIndex = matchIndex - statement.start;
+  const beforeVerb = statement.text.slice(0, relativeIndex);
+  const afterVerb = statement.text.slice(relativeIndex + matchLength);
+  const resultVerbPattern = /\b(?:passed|failed|verified|observed|completed|succeeded|executed|ran)\b/gi;
+  const zeroPattern = /\b(?:0|zero|none|no|neither)\b/gi;
+  const previousResult = [...beforeVerb.matchAll(resultVerbPattern)].at(-1);
+  const previousZero = [...beforeVerb.matchAll(zeroPattern)].at(-1);
+  if (previousZero && (!previousResult || previousZero.index > previousResult.index)) {
+    const between = beforeVerb.slice(previousZero.index + previousZero[0].length);
+    const tokenCount = between.match(/[A-Za-z0-9]+/g)?.length || 0;
+    if (tokenCount <= 8 && !/\b(?:and|but|then|while|whereas|with|after|before)\b/i.test(between)) return true;
+  }
+
+  const immediateZero = /^\s*(?:(?:only|exactly|all)\s+)?(?:0|zero|none|no)\b/i;
+  if (immediateZero.test(afterVerb)) return true;
+  const labeledZero = afterVerb.match(/^\s*([^.;,!?>\n]{0,48})(?::|=)\s*(?:0|zero|none)\b/i);
+  return Boolean(labeledZero && !/\b(?:with|after|before)\b/i.test(labeledZero[1]));
+}
+
+function countIsZeroRatioDenominator(value, matchIndex) {
+  const beforeCount = value.slice(Math.max(0, matchIndex - 96), matchIndex);
+  return /\b(?:0|zero|none|neither)\s*(?:\/\s*|(?:out\s+of|of)\s+(?:(?:the|a)\s+)?(?:total\s+)?(?:of\s+)?)$/i.test(beforeCount);
+}
 
 function placeholderMarkerIndex(value) {
   return value.search(placeholderPattern);
@@ -297,42 +487,53 @@ function placeholderMarkerIndex(value) {
 function concreteResultIndex(value) {
   expectationLanguagePattern.lastIndex = 0;
   const hasExpectationLanguage = expectationLanguagePattern.test(value);
-  let earliest = Number.POSITIVE_INFINITY;
   const substantiveTokenCount = value.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g)?.length || 0;
+  const candidates = [];
   for (const { kind, pattern, requiresContext } of concreteResultPatterns) {
     pattern.lastIndex = 0;
     for (const match of value.matchAll(pattern)) {
-      if (requiresContext && substantiveTokenCount < 3) continue;
-      if (kind === 'verb') {
-        const beforeMatch = value.slice(0, match.index);
-        const clauseBoundary = Math.max(
-          beforeMatch.lastIndexOf('.'),
-          beforeMatch.lastIndexOf(';'),
-          beforeMatch.lastIndexOf(','),
-          beforeMatch.lastIndexOf(':'),
-          beforeMatch.lastIndexOf('!'),
-          beforeMatch.lastIndexOf('?'),
-          beforeMatch.lastIndexOf('\n'),
-        );
-        const clausePrefix = beforeMatch.slice(clauseBoundary + 1);
-        if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b/i.test(clausePrefix)) continue;
-        if (/\bnot\b(?!\s+only\b)|\b(?:never|no|without)\b/i.test(clausePrefix)) continue;
-        if (/\b(?:yet|still|remain(?:s|ed)?|need(?:s|ed)?)\s+to\s+be\b|\bto\s+be\s*$/i.test(clausePrefix)) continue;
-      }
-      if (kind === 'metric' && hasExpectationLanguage) {
-        const prefix = value.slice(0, match.index);
-        expectationLanguagePattern.lastIndex = 0;
-        actualContextPattern.lastIndex = 0;
-        const expectationIndexes = [...prefix.matchAll(expectationLanguagePattern)].map((item) => item.index);
-        const actualIndexes = [...prefix.matchAll(actualContextPattern)].map((item) => item.index);
-        const lastExpectation = expectationIndexes.at(-1) ?? -1;
-        const lastActual = actualIndexes.at(-1) ?? -1;
-        if (lastActual <= lastExpectation) continue;
-      }
-      earliest = Math.min(earliest, match.index);
+      candidates.push({ kind, requiresContext, match });
     }
   }
-  return Number.isFinite(earliest) ? earliest : -1;
+  candidates.sort((left, right) => left.match.index - right.match.index);
+
+  expectationLanguagePattern.lastIndex = 0;
+  actualContextPattern.lastIndex = 0;
+  const expectationIndexes = [...value.matchAll(expectationLanguagePattern)].map((item) => item.index);
+  const actualIndexes = [...value.matchAll(actualContextPattern)].map((item) => item.index);
+  const lastIndexBefore = (indexes, limit) => {
+    let low = 0;
+    let high = indexes.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (indexes[middle] < limit) low = middle + 1;
+      else high = middle;
+    }
+    return low > 0 ? indexes[low - 1] : -1;
+  };
+
+  for (const { kind, requiresContext, match } of candidates) {
+    if (requiresContext && substantiveTokenCount < 3) continue;
+    if (kind === 'count' && Number.parseInt(match[0], 10) === 0) continue;
+    if (kind === 'count' && countIsZeroRatioDenominator(value, match.index)) continue;
+    if (kind === 'count' && nonExecutionStatePattern.test(boundedStatementAt(value, match.index).text)) continue;
+    if (kind === 'verb') {
+      if (verbIsTiedToZeroCount(value, match.index, match[0].length)) continue;
+      const clause = boundedClauseAt(value, match.index);
+      if (clause.prefixTruncated) continue;
+      const clausePrefix = value.slice(clause.start, match.index);
+      if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b/i.test(clausePrefix)) continue;
+      if (/\bnot\b(?!\s+only\b)|\b(?:never|no|without|none|neither)\b/i.test(clausePrefix)) continue;
+      if (/\b(?:yet|still|remain(?:s|ed)?|need(?:s|ed)?)\s+to\s+be\b|\bto\s+be\s*$/i.test(clausePrefix)) continue;
+    }
+    if ((kind === 'metric' || kind === 'count') && hasExpectationLanguage) {
+      const lastExpectation = lastIndexBefore(expectationIndexes, match.index);
+      const lastActual = lastIndexBefore(actualIndexes, match.index);
+      if (lastActual <= lastExpectation) continue;
+    }
+    return match.index;
+  }
+  return -1;
 }
 
 function isInvalidIdentityValue(value) {
@@ -342,6 +543,7 @@ function isInvalidIdentityValue(value) {
 function concreteProofReason(value) {
   if (typeof value !== 'string' || value.trim() === '') return 'must be a nonblank string';
   const normalized = value.trim();
+  if (noExecutionPattern.test(normalized)) return 'must not claim zero or unexecuted validation as observed proof';
   const concreteIndex = concreteResultIndex(normalized);
   if (concreteIndex < 0) return 'must record a concrete observed result';
   const placeholderIndex = placeholderMarkerIndex(normalized);
@@ -429,24 +631,27 @@ function validateEvidenceReference(reference, projectLabel, context) {
     };
   }
 
-  context.resourceUsage.uniqueEvidenceFileCount += 1;
-  context.resourceUsage.uniqueEvidenceBytes += inspection.stats.size;
-  if (context.resourceUsage.uniqueEvidenceBytes > resourceLimits.maxUniqueEvidenceBytesPerManifest) {
+  if (context.resourceUsage.uniqueEvidenceBytes + inspection.stats.size > resourceLimits.maxUniqueEvidenceBytesPerManifest) {
     const reason = `unique evidence bytes exceed ${resourceLimits.maxUniqueEvidenceBytesPerManifest}`;
     context.evidenceCache.set(identityKey, { reason });
     return { reason: `${projectLabel} evidence ${JSON.stringify(reference)}: ${reason}`, key: identityKey };
   }
 
-  let contents;
-  try {
-    contents = fs.readFileSync(evidencePath, 'utf8');
-  } catch {
-    const reason = 'file is unreadable';
+  const readResult = readContainedRegularTextFile(evidencePath, maxTextFileBytes, inspection.stats);
+  if (!readResult.ok) {
+    const reason = readResult.reason;
     context.evidenceCache.set(identityKey, { reason });
     return { reason: `${projectLabel} evidence ${JSON.stringify(reference)}: ${reason}`, key: identityKey };
   }
+  if (context.resourceUsage.uniqueEvidenceBytes + readResult.bytes > resourceLimits.maxUniqueEvidenceBytesPerManifest) {
+    const reason = `unique evidence bytes exceed ${resourceLimits.maxUniqueEvidenceBytesPerManifest}`;
+    context.evidenceCache.set(identityKey, { reason });
+    return { reason: `${projectLabel} evidence ${JSON.stringify(reference)}: ${reason}`, key: identityKey };
+  }
+  context.resourceUsage.uniqueEvidenceFileCount += 1;
+  context.resourceUsage.uniqueEvidenceBytes += readResult.bytes;
 
-  const proofReason = concreteProofReason(contents);
+  const proofReason = concreteProofReason(readResult.content);
   context.evidenceCache.set(identityKey, { reason: proofReason });
   if (proofReason) {
     return { reason: `${projectLabel} evidence ${JSON.stringify(reference)}: ${proofReason}`, key: identityKey };
@@ -471,9 +676,14 @@ function validateEvidenceManifest(manifestFile) {
     return finish();
   }
 
+  const readResult = readContainedRegularTextFile(manifestFile, maxTextFileBytes, inspection.stats);
+  if (!readResult.ok) {
+    reasons.push(readResult.reason);
+    return finish();
+  }
   let manifest;
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    manifest = JSON.parse(readResult.content);
   } catch {
     reasons.push('manifest is malformed JSON');
     return finish();

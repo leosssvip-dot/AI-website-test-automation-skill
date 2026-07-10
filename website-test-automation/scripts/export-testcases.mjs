@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseCaseCliArguments } from './lib/cli-options.mjs';
 import { validateCase } from './lib/testcase-schema.mjs';
-import { collectCaseFiles, loadCases } from './lib/yaml-testcases.mjs';
+import { collectCaseFiles, createCaseLoadBudget, loadCases } from './lib/yaml-testcases.mjs';
 
 function usage() {
   console.log(
@@ -73,10 +73,11 @@ if (outPath) {
 const cases = [];
 const parseErrors = [];
 const schemaErrors = [];
+const loadBudget = createCaseLoadBudget();
 for (const file of files) {
   const relFile = path.relative(process.cwd(), file);
   try {
-    const loaded = loadCases(file);
+    const loaded = loadCases(file, loadBudget);
     if (loaded.length === 0) {
       schemaErrors.push(`${relFile}: no test cases found`);
       continue;

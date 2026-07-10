@@ -6,6 +6,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { ENUMS } from '../website-test-automation/scripts/lib/testcase-schema.mjs';
+import {
+  collectCaseFiles as collectCaseFilesForSwapTest,
+  loadCases as loadCasesForSwapTest,
+} from '../website-test-automation/scripts/lib/yaml-testcases.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const skillRoot = path.join(repoRoot, 'website-test-automation');
@@ -159,6 +163,60 @@ test('skill package validator rejects trigger and adapter drift', () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /design artifacts|Claude Code browser workflows/i);
 });
 
+test('skill package validator requires unique exact frontmatter keys', () => {
+  const source = fs.readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8');
+
+  const missingName = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-frontmatter-missing-name-'));
+  fs.cpSync(skillRoot, missingName, { recursive: true });
+  fs.writeFileSync(
+    path.join(missingName, 'SKILL.md'),
+    source
+      .replace(/^name: website-test-automation\n/m, '')
+      .replace(
+        /^description: .*$/m,
+        'description: "name: website-test-automation; design artifacts Figma Storybook design tokens"',
+      ),
+  );
+  const missingNameResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', missingName]);
+  assert.equal(missingNameResult.status, 1);
+  assert.match(`${missingNameResult.stdout}\n${missingNameResult.stderr}`, /name must be website-test-automation/i);
+
+  const duplicateName = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-frontmatter-duplicate-name-'));
+  fs.cpSync(skillRoot, duplicateName, { recursive: true });
+  fs.writeFileSync(
+    path.join(duplicateName, 'SKILL.md'),
+    source.replace(/^name: website-test-automation$/m, 'name: wrong\nname: website-test-automation'),
+  );
+  const duplicateNameResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', duplicateName]);
+  assert.equal(duplicateNameResult.status, 1);
+  assert.match(`${duplicateNameResult.stdout}\n${duplicateNameResult.stderr}`, /duplicate.*name/i);
+
+  const quotedName = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-frontmatter-quoted-name-'));
+  fs.cpSync(skillRoot, quotedName, { recursive: true });
+  fs.writeFileSync(
+    path.join(quotedName, 'SKILL.md'),
+    source.replace(/^name: website-test-automation$/m, 'name: "website-test-automation"'),
+  );
+  const quotedNameResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', quotedName]);
+  assert.equal(quotedNameResult.status, 0, `${quotedNameResult.stdout}\n${quotedNameResult.stderr}`);
+
+  const commentedAgent = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-agent-comment-bypass-'));
+  fs.cpSync(skillRoot, commentedAgent, { recursive: true });
+  fs.writeFileSync(
+    path.join(commentedAgent, 'agents', 'openai.yaml'),
+    [
+      '# short_description: "Website testing automation skill metadata"',
+      '# default_prompt: "Use $website-test-automation for QA"',
+    ].join('\n'),
+  );
+  const commentedAgentResult = runRaw('node', [
+    'website-test-automation/scripts/validate-skill.mjs',
+    commentedAgent,
+  ]);
+  assert.equal(commentedAgentResult.status, 1);
+  assert.match(`${commentedAgentResult.stdout}\n${commentedAgentResult.stderr}`, /interface|short_description|default_prompt/i);
+});
+
 test('skill package validator rejects workflow order drift', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-order-drift-'));
   fs.cpSync(skillRoot, fixture, { recursive: true });
@@ -228,6 +286,31 @@ test('skill package validator rejects missing human reasonableness contract', ()
   const result = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', fixture]);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /human-reasonableness|Human Reasonableness/i);
+});
+
+test('skill package validator requires runtime libraries and contained parent directories', () => {
+  const missingLibrary = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-runtime-lib-'));
+  fs.cpSync(skillRoot, missingLibrary, { recursive: true });
+  fs.rmSync(path.join(missingLibrary, 'scripts', 'lib', 'testcase-schema.mjs'));
+  const missingResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', missingLibrary]);
+  assert.notEqual(missingResult.status, 0);
+  assert.match(`${missingResult.stdout}\n${missingResult.stderr}`, /testcase-schema\.mjs/i);
+
+  const invalidLibrary = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-runtime-lib-syntax-'));
+  fs.cpSync(skillRoot, invalidLibrary, { recursive: true });
+  fs.writeFileSync(path.join(invalidLibrary, 'scripts', 'lib', 'cli-options.mjs'), 'export const = broken;');
+  const invalidResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', invalidLibrary]);
+  assert.notEqual(invalidResult.status, 0);
+  assert.match(`${invalidResult.stdout}\n${invalidResult.stderr}`, /syntax check failed.*cli-options\.mjs/i);
+
+  const linkedParents = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-linked-parent-'));
+  fs.cpSync(skillRoot, linkedParents, { recursive: true });
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-validator-linked-parent-target-'));
+  fs.renameSync(path.join(linkedParents, 'references'), path.join(outside, 'references'));
+  fs.symlinkSync(path.join(outside, 'references'), path.join(linkedParents, 'references'));
+  const linkedResult = runRaw('node', ['website-test-automation/scripts/validate-skill.mjs', linkedParents]);
+  assert.notEqual(linkedResult.status, 0);
+  assert.match(`${linkedResult.stdout}\n${linkedResult.stderr}`, /references.*(?:symbolic link|outside)|(?:symbolic link|outside).*references/i);
 });
 
 test('skill package validator does not execute candidate scripts by default', () => {
@@ -844,6 +927,86 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
       },
     },
     {
+      name: 'zero execution disguised as passed evidence',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), '0 tests passed; tests not run\n');
+        fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), '0 tests passed; tests not run\n');
+        writeManifest({
+          version: 1,
+          projects: projects.map((project) => ({ ...project, outcome: '0 tests passed; tests not run' })),
+        });
+      },
+    },
+    ...[
+      ['zero failed count does not prove execution', '0 tests failed'],
+      ['zero succeeded count does not prove execution', '0 checks succeeded'],
+      ['auxiliary zero count does not prove execution', '0 tests have passed'],
+      ['reversed zero count does not prove execution', 'failed 0 tests'],
+      ['adverb zero count does not prove execution', '0 tests successfully passed'],
+      ['only reversed zero count does not prove execution', 'passed only 0 tests'],
+      ['of-ratio zero count does not prove execution', '0 of 12 tests passed'],
+      ['out-of-ratio zero count does not prove execution', '0 out of 12 tests passed'],
+      ['skipped-only count does not prove execution', '12 tests skipped'],
+      ['copula skipped-only count does not prove execution', '12 tests were all skipped'],
+      ['auxiliary skipped-only count does not prove execution', '12 tests have been skipped'],
+      ['reversed skipped-only count does not prove execution', 'skipped 12 tests'],
+      ['pending-only count does not prove execution', '12 tests pending'],
+      ['disabled-only count does not prove execution', '12 tests disabled'],
+      ['blocked-only count does not prove execution', 'blocked 12 tests'],
+      ['postfixed zero failed count does not prove execution', 'failed tests: 0'],
+      ['postfixed zero passed count does not prove execution', 'tests passed: 0'],
+      ['none-ratio zero count does not prove execution', 'none of the 12 tests passed'],
+      ['multiword zero unit does not prove execution', '0 test cases passed'],
+      ['expanded total ratio does not prove execution', '0 of a total of 12 tests passed'],
+      ['ignored-only count does not prove execution', '12 tests ignored'],
+      ['not-started count does not prove execution', '12 tests not started'],
+      ['collected-only count does not prove execution', '12 tests collected'],
+      ['runner zero pass and failure summary does not prove execution', '0 failed, 0 passed (3s)'],
+      ['runner labeled tests zero summary does not prove execution', 'Tests 0 passed (0)'],
+      ['runner test-files zero summary does not prove execution', 'Test Files 0 passed'],
+      ['zero scenarios do not prove execution', '0 scenarios passed'],
+      ['zero specs do not prove execution', '0 specs passed'],
+      ['zero examples do not prove execution', '0 examples passed'],
+      ['zero suites do not prove execution', '0 suites passed'],
+      ['reversed zero scenarios do not prove execution', 'passed 0 scenarios'],
+      ['selected test count does not prove execution', '12 tests selected'],
+      ['listed test count does not prove execution', '12 tests listed'],
+      ['found test count does not prove execution', '12 tests found'],
+      ['to-run test count does not prove execution', '12 tests to run'],
+      ['would-run test count does not prove execution', '12 tests would run'],
+      ['dry-run test count does not prove execution', '12 tests dry-run only'],
+      ['enumerated test count does not prove execution', '12 tests enumerated'],
+      ['filtered test count does not prove execution', '12 tests filtered'],
+      ['excluded test count does not prove execution', '12 tests excluded'],
+      ['omitted test count does not prove execution', '12 tests omitted'],
+      ['completed command with zero tests does not prove execution', 'command completed with 0 tests'],
+      ['completed run with zero executed tests does not prove execution', 'test run completed with zero tests executed'],
+      ['succeeded command with no tests ran does not prove execution', 'command succeeded but 0 tests ran'],
+      ['completed command without running tests does not prove execution', 'command completed without running tests'],
+      ['dry-run completion does not prove execution', 'validation completed in dry-run mode'],
+      ['list-only completion does not prove execution', 'test command completed with --list'],
+      ['labeled zero tests after completion do not prove execution', 'command completed; Tests: 0'],
+      ['equals-labeled zero tests do not prove execution', 'command succeeded with Tests = 0'],
+      ['parenthesized zero tests do not prove execution', 'validation completed (0 tests)'],
+      ['bracketed zero tests do not prove execution', 'command completed [0 tests]'],
+      ['leading labeled zero tests do not prove execution', 'Tests: 0; command completed'],
+      ['leading equals zero tests do not prove execution', 'Tests=0, validation succeeded'],
+      ['run completion with labeled zero tests does not prove execution', 'test run completed with tests: 0'],
+      ['zero total tests do not prove execution', 'command completed with 0 total tests'],
+      ['total-tests label does not prove execution', 'Total tests: 0; command completed'],
+      ['test-count label does not prove execution', 'Test count: 0; command completed'],
+      ['none-tests label does not prove execution', 'Tests: none; command completed'],
+      ['word-zero tests label does not prove execution', 'Tests zero; command completed'],
+      ['plain tests-zero label does not prove execution', 'Tests 0; command completed'],
+    ].map(([name, outcome]) => ({
+      name,
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), `${outcome}\n`);
+        fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), `${outcome}\n`);
+        writeManifest({ version: 1, projects: projects.map((project) => ({ ...project, outcome })) });
+      },
+    })),
+    {
       name: 'negated evidence result',
       setup: ({ projects, evidenceDir, writeManifest }) => {
         fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'critical flow was not verified yet\n');
@@ -1045,6 +1208,61 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
 
   assert.deepEqual(wronglyUnlocked, []);
   assert.deepEqual(missingAuditReasons, []);
+});
+
+test('readiness scorer analyzes repetitive concrete-proof text in bounded time', () => {
+  const fixture = copiedReadinessFixture('readiness-proof-analysis-limit-');
+  const evidenceDir = path.join(fixture, 'real-project-validation');
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'context passed '.repeat(10_000));
+  fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta passed 9 deterministic assertions.\n');
+  fs.writeFileSync(
+    path.join(evidenceDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [
+        readinessProject('project-alpha', 'real-project-validation/project-alpha.md'),
+        readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+      ],
+    }),
+  );
+
+  const raw = runRaw(
+    'node',
+    ['website-test-automation/scripts/score-test-readiness.mjs', fixture],
+    { timeout: 3_000 },
+  );
+  assert.equal(raw.error, undefined, `proof analysis must stay bounded: ${raw.error}`);
+  assert.equal(raw.status, 0, `${raw.stdout}\n${raw.stderr}`);
+  const result = JSON.parse(raw.stdout);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, true);
+  assert.equal(result.overallScore, result.contractScore);
+
+  const zeroFixture = copiedReadinessFixture('readiness-zero-proof-bounded-');
+  const zeroEvidenceDir = path.join(zeroFixture, 'real-project-validation');
+  fs.mkdirSync(zeroEvidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(zeroEvidenceDir, 'project-alpha.md'), '0 passed '.repeat(15_000));
+  fs.writeFileSync(path.join(zeroEvidenceDir, 'project-beta.md'), 'Project beta passed 9 deterministic assertions.\n');
+  fs.writeFileSync(
+    path.join(zeroEvidenceDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [
+        readinessProject('project-alpha', 'real-project-validation/project-alpha.md'),
+        readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+      ],
+    }),
+  );
+  const zeroRaw = runRaw(
+    'node',
+    ['website-test-automation/scripts/score-test-readiness.mjs', zeroFixture],
+    { timeout: 3_000 },
+  );
+  assert.equal(zeroRaw.error, undefined, `zero-proof analysis must stay bounded: ${zeroRaw.error}`);
+  assert.equal(zeroRaw.status, 0, `${zeroRaw.stdout}\n${zeroRaw.stderr}`);
+  const zeroResult = JSON.parse(zeroRaw.stdout);
+  assert.equal(zeroResult.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(zeroResult.overallScore <= 89, true);
 });
 
 test('readiness scorer audits a final manifest symlink without reading its target', () => {
@@ -1664,6 +1882,32 @@ test('route-inventory discovers static and Next.js routes', () => {
   assert.equal(routes.includes('GET|POST /api/projects'), true);
 });
 
+test('route-inventory excludes public assets and test fixtures from static HTML routes', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'static-html-route-roots-'));
+  fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({ name: 'static-route-fixture' }));
+  for (const relative of [
+    'index.html',
+    'about.html',
+    'blog/index.html',
+    'public/robots.html',
+    'static/embed.html',
+    'tests/fixtures/login.html',
+    'src/components/template.html',
+  ]) {
+    const file = path.join(fixture, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '<!doctype html><title>fixture</title>');
+  }
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const staticRoutes = result.routes
+    .filter((route) => route.kind === 'static-html-route')
+    .map((route) => route.route)
+    .sort();
+  assert.deepEqual(staticRoutes, ['/', '/about', '/blog']);
+  assert.match(result.notes.join('\n'), /static HTML asset|route root/i);
+});
+
 test('route-inventory handles Next.js root pages and route groups', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'route-inventory-'));
   fs.mkdirSync(path.join(fixture, 'app'), { recursive: true });
@@ -1802,6 +2046,12 @@ test('route-inventory ignores commented route hints and rejects route symlinks',
     [
       "app.get('/live', handler);",
       "const liveRoute = <Route path='/client-live' />;",
+      `const serverDocs = "app.get('/not-real', handler)";`,
+      `const clientDocs = "<Route path='/not-client' />";`,
+      `const routeRegex = /app.get\\('\\/fake'\\)/;`,
+      `if (enabled) /app.get\\('\\/if-fake'\\)/.test(source); else /app.get\\('\\/else-fake'\\)/.test(source);`,
+      `app.get('/dynamic/' + resource, handler);`,
+      `const dynamicClient = { path: '/user/' + id };`,
       "// app.post('/commented-server', handler);",
       "/* const hiddenRoute = <Route path='/commented-client' />; */",
     ].join('\n'),
@@ -1816,6 +2066,13 @@ test('route-inventory ignores commented route hints and rejects route symlinks',
   assert.equal(routes.includes('/client-live'), true);
   assert.equal(routes.includes("POST /commented-server"), false);
   assert.equal(routes.includes('/commented-client'), false);
+  assert.equal(routes.includes('GET /not-real'), false);
+  assert.equal(routes.includes('/not-client'), false);
+  assert.equal(routes.includes('GET /fake'), false);
+  assert.equal(routes.includes('GET /if-fake'), false);
+  assert.equal(routes.includes('GET /else-fake'), false);
+  assert.equal(routes.includes('GET /dynamic/'), false);
+  assert.equal(routes.includes('/user/'), false);
   assert.equal(routes.includes('/leaked'), false);
   assert.match(result.notes.join('\n'), /symlink/i);
 });
@@ -1899,7 +2156,17 @@ test('summarize-test-report redacts common secrets from failure output', () => {
         'API_TOKEN=token-secret-345',
         'CLIENT_SECRET: client-secret-678',
         'PASSWORD="password-secret-901"',
+        'API_KEY=api-key-secret-012',
+        'X_API_KEY: x-api-key-secret-123',
+        'SESSION=session-secret-234',
+        'PRIVATE_KEY=private-key-secret-345',
+        'ghp_1234567890abcdefghijklmnopqrstuvwxyz',
+        'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz',
+        'sk-ant-api03-1234567890abcdefghijklmnopqrstuvwxyz',
+        'npm_1234567890abcdefghijklmnopqrstuvwxyz',
         'GET https://example.test/callback?access_token=query-secret-234&safe=yes&password=query-password-567',
+        'JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signatureSecret123',
+        'GET https://storage.test/object?X-Amz-Signature=aws-presign-secret-123&X-Amz-Credential=aws-credential-query-234&sig=short-signature-secret-345&code=one-time-code-456',
       ].join('\n'),
     }),
   );
@@ -1922,6 +2189,19 @@ test('summarize-test-report redacts common secrets from failure output', () => {
     'token-secret-345',
     'client-secret-678',
     'password-secret-901',
+    'api-key-secret-012',
+    'x-api-key-secret-123',
+    'session-secret-234',
+    'private-key-secret-345',
+    'ghp_1234567890abcdefghijklmnopqrstuvwxyz',
+    'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz',
+    'sk-ant-api03-1234567890abcdefghijklmnopqrstuvwxyz',
+    'npm_1234567890abcdefghijklmnopqrstuvwxyz',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signatureSecret123',
+    'aws-presign-secret-123',
+    'aws-credential-query-234',
+    'short-signature-secret-345',
+    'one-time-code-456',
     'query-secret-234',
     'query-password-567',
   ]) {
@@ -1930,6 +2210,345 @@ test('summarize-test-report redacts common secrets from failure output', () => {
   assert.equal(result.failures[0].title, 'secret-bearing failure');
   assert.equal(result.failures[0].status, 'failed');
   assert.match(result.failures[0].message, /\[REDACTED\]/);
+
+  const markdown = run('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    fixture,
+    '--format=md',
+  ]);
+  for (const secret of [
+    'eyJhbGciOiJIUzI1NiJ9',
+    'aws-presign-secret-123',
+    'aws-credential-query-234',
+    'short-signature-secret-345',
+    'one-time-code-456',
+  ]) {
+    assert.equal(markdown.includes(secret), false, `expected ${secret} to be redacted from Markdown`);
+  }
+});
+
+test('summarize-test-report redacts common PII, user paths, and unsafe control characters', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-pii-controls-'));
+  const report = path.join(fixture, 'Alice Smith <alice@example.com>.json');
+  fs.writeFileSync(
+    report,
+    JSON.stringify({
+      title: 'Alice Smith <alice@example.com>',
+      status: 'failed',
+      message: [
+        'phone +1-415-555-0199',
+        'SSN 123-45-6789',
+        'home /Users/alice/private/report.txt',
+        'terminal before \u001bc after \u001b]0;spoofed\u0007',
+        'bidi \u202Etxt.exe',
+      ].join('\n'),
+      attachments: [{ name: 'trace', path: '/home/alice/traces/alice@example.com.zip' }],
+    }),
+  );
+
+  const jsonResult = runRaw('node', ['website-test-automation/scripts/summarize-test-report.mjs', report]);
+  assert.equal(jsonResult.status, 0, `${jsonResult.stdout}\n${jsonResult.stderr}`);
+  const summary = JSON.parse(jsonResult.stdout);
+  const serialized = JSON.stringify(summary);
+  for (const sensitive of [
+    'Alice Smith',
+    'alice@example.com',
+    '+1-415-555-0199',
+    '123-45-6789',
+    '/Users/alice',
+    '/home/alice',
+    '\u001b',
+    '\u0007',
+    '\u202E',
+  ]) {
+    assert.equal(serialized.includes(sensitive), false, `expected ${JSON.stringify(sensitive)} to be removed`);
+  }
+  assert.equal(path.isAbsolute(summary.reportPath), false);
+  assert.match(serialized, /REDACTED/);
+
+  const markdownResult = runRaw('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    report,
+    '--format=md',
+  ]);
+  assert.equal(markdownResult.status, 0, `${markdownResult.stdout}\n${markdownResult.stderr}`);
+  assert.equal(/[\u001b\u0007\u202E]/u.test(markdownResult.stdout), false);
+  assert.equal(markdownResult.stdout.includes('alice@example.com'), false);
+  assert.equal(markdownResult.stdout.includes('+1-415-555-0199'), false);
+  assert.equal(markdownResult.stdout.includes('123-45-6789'), false);
+});
+
+test('summarize-test-report redacts adversarial unmatched private-key markers in bounded time', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-private-key-linear-'));
+  fs.writeFileSync(
+    path.join(fixture, 'private-key-markers.json'),
+    JSON.stringify({
+      title: 'private key marker stress',
+      status: 'failed',
+      message: '-----BEGIN PRIVATE KEY-----'.repeat(40_000),
+    }),
+  );
+
+  const result = runRaw(
+    'node',
+    ['website-test-automation/scripts/summarize-test-report.mjs', fixture],
+    { timeout: 3_000 },
+  );
+  assert.equal(result.error, undefined, `private-key redaction must stay bounded: ${result.error}`);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.stdout.includes('BEGIN PRIVATE KEY'), false);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.filesRead, 1);
+  assert.equal(summary.counts.failed, 1);
+  assert.match(summary.failures[0].message, /REDACTED/);
+});
+
+test('summarize-test-report fails closed when report resource limits are exceeded', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-resource-limit-'));
+  fs.writeFileSync(path.join(fixture, 'oversized.json'), ' '.repeat(16 * 1024 * 1024 + 1));
+
+  const result = runRaw('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(result.status, 1, `resource truncation must be nonzero\n${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.filesDiscovered, 1);
+  assert.equal(summary.filesRead, 0);
+  assert.equal(summary.filesSkipped, 1);
+  assert.equal(summary.filesTruncated, true);
+  assert.equal(summary.incomplete, true);
+  assert.match(summary.resourceWarnings.join('\n'), /size|byte|resource/i);
+  assert.match(summary.nextAction, /incomplete|resource/i);
+});
+
+test('summarize-test-report bounds JSON and JUnit structural expansion before parsing', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-structure-limit-'));
+  fs.writeFileSync(
+    path.join(fixture, 'json-structure.json'),
+    `[${'{},'.repeat(200_000)}{}]`,
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'junit-testcases.xml'),
+    `<testsuite tests="50001">${'<testcase/>'.repeat(50_001)}</testsuite>`,
+  );
+
+  const result = runRaw(
+    'node',
+    [
+      '--max-old-space-size=128',
+      'website-test-automation/scripts/summarize-test-report.mjs',
+      fixture,
+    ],
+    { timeout: 5_000 },
+  );
+  assert.equal(result.error, undefined, `structural limits must stay bounded: ${result.error}`);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.filesDiscovered, 2);
+  assert.equal(summary.filesRead, 0);
+  assert.equal(summary.incomplete, true);
+  assert.equal(summary.filesTruncated, true);
+  assert.equal(summary.resourceWarnings.length, 2);
+  assert.match(summary.resourceWarnings.join('\n'), /JSON structure|JUnit testcase count/i);
+});
+
+test('summarize-test-report fails closed when discovered reports cannot be parsed', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-unsupported-'));
+  fs.writeFileSync(path.join(fixture, 'malformed.json'), '{');
+  fs.writeFileSync(path.join(fixture, 'zero-testcase.xml'), '<testsuite tests="0"></testsuite>');
+
+  const jsonResult = runRaw('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(jsonResult.status, 1, `unsupported reports must be nonzero\n${jsonResult.stdout}\n${jsonResult.stderr}`);
+  const summary = JSON.parse(jsonResult.stdout);
+  assert.equal(summary.filesDiscovered, 2);
+  assert.equal(summary.filesRead, 0);
+  assert.equal(summary.filesSkipped, 2);
+  assert.equal(summary.filesTruncated, false);
+  assert.equal(summary.incomplete, true);
+  assert.deepEqual(summary.resourceWarnings, []);
+  assert.equal(summary.unsupported.length, 2);
+  assert.match(summary.nextAction, /unsupported|parse/i);
+
+  const markdownResult = runRaw('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    fixture,
+    '--format=md',
+  ]);
+  assert.equal(markdownResult.status, 1);
+  assert.match(markdownResult.stdout, /Incomplete: true/i);
+  assert.match(markdownResult.stdout, /Unsupported reports:/i);
+});
+
+test('summarize-test-report rejects truncated or structurally malformed JUnit XML', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-malformed-xml-'));
+  fs.writeFileSync(
+    path.join(fixture, 'truncated.xml'),
+    '<testsuite><testcase name="first"/><testcase name="later"><failure message="boom">',
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'mismatched.xml'),
+    '<testsuite><testcase name="first"></testsuite></testcase>',
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'testcase-under-testsuites.xml'),
+    '<testsuites tests="1"><testcase name="not in a suite"/></testsuites>',
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'wrapped-testcase.xml'),
+    '<testsuite tests="1"><wrapper><testcase name="wrapped"/></wrapper></testsuite>',
+  );
+  fs.writeFileSync(
+    path.join(fixture, 'bare-ampersand.xml'),
+    '<testsuite tests="1"><testcase name="A & B"/></testsuite>',
+  );
+
+  const result = runRaw('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(result.status, 1, `malformed XML must be nonzero\n${result.stdout}\n${result.stderr}`);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.filesDiscovered, 5);
+  assert.equal(summary.filesRead, 0);
+  assert.equal(summary.incomplete, true);
+  assert.equal(summary.unsupported.length, 5);
+  assert.deepEqual(summary.counts, { passed: 0, failed: 0, skipped: 0, retried: 0 });
+});
+
+test('summarize-test-report validates JUnit aggregate counts without regex backtracking', () => {
+  const mismatchFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-junit-counts-'));
+  fs.writeFileSync(
+    path.join(mismatchFixture, 'mismatched-counts.xml'),
+    '<testsuite tests="2" failures="1"><testcase name="only passing case"/></testsuite>',
+  );
+  const mismatchResult = runRaw('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    mismatchFixture,
+  ]);
+  assert.equal(mismatchResult.status, 1, `mismatched JUnit totals must be nonzero\n${mismatchResult.stdout}\n${mismatchResult.stderr}`);
+  const mismatchSummary = JSON.parse(mismatchResult.stdout);
+  assert.equal(mismatchSummary.filesRead, 0);
+  assert.equal(mismatchSummary.unsupported.length, 1);
+  assert.deepEqual(mismatchSummary.counts, { passed: 0, failed: 0, skipped: 0, retried: 0 });
+
+  const repeatedFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-junit-linear-'));
+  fs.writeFileSync(
+    path.join(repeatedFixture, 'repeated-unclosed.xml'),
+    `<testsuite>${'<testcase>'.repeat(100_000)}`,
+  );
+  const repeatedResult = runRaw(
+    'node',
+    ['website-test-automation/scripts/summarize-test-report.mjs', repeatedFixture],
+    { timeout: 3_000 },
+  );
+  assert.equal(repeatedResult.error, undefined, `malformed JUnit parsing must stay bounded: ${repeatedResult.error}`);
+  assert.equal(repeatedResult.status, 1, `repeated unclosed tags must be nonzero\n${repeatedResult.stdout}\n${repeatedResult.stderr}`);
+  const repeatedSummary = JSON.parse(repeatedResult.stdout);
+  assert.equal(repeatedSummary.filesRead, 0);
+  assert.equal(repeatedSummary.unsupported.length, 1);
+});
+
+test('summarize-test-report maps explicit JUnit testcase statuses without false passes', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-junit-status-'));
+  for (const [name, attribute] of [
+    ['notrun', 'status="notrun"'],
+    ['disabled-status', 'status="disabled"'],
+    ['pending', 'status="pending"'],
+    ['skipped', 'status="skipped"'],
+    ['disabled-attribute', 'disabled="true"'],
+  ]) {
+    fs.writeFileSync(
+      path.join(fixture, `${name}.xml`),
+      `<testsuite><testcase name="${name}" ${attribute}/></testsuite>`,
+    );
+  }
+  for (const [name, status] of [
+    ['failed', 'failed'],
+    ['failure', 'failure'],
+    ['error', 'error'],
+  ]) {
+    fs.writeFileSync(
+      path.join(fixture, `${name}.xml`),
+      `<testsuite><testcase name="${name}" status="${status}"/></testsuite>`,
+    );
+  }
+
+  const summary = runJson('node', ['website-test-automation/scripts/summarize-test-report.mjs', fixture]);
+  assert.equal(summary.filesRead, 8);
+  assert.equal(summary.counts.passed, 0);
+  assert.equal(summary.counts.skipped, 5);
+  assert.equal(summary.counts.failed, 3);
+
+  const invalidFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-junit-status-invalid-'));
+  fs.writeFileSync(
+    path.join(invalidFixture, 'unknown.xml'),
+    '<testsuite><testcase name="unknown" status="mystery"/></testsuite>',
+  );
+  fs.writeFileSync(
+    path.join(invalidFixture, 'conflict.xml'),
+    '<testsuite><testcase name="conflict" status="passed"><failure message="boom"/></testcase></testsuite>',
+  );
+  fs.writeFileSync(
+    path.join(invalidFixture, 'running.xml'),
+    '<testsuite><testcase name="still executing" status="running"/></testsuite>',
+  );
+  const invalidResult = runRaw('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    invalidFixture,
+  ]);
+  assert.equal(invalidResult.status, 1, `unknown or conflicting statuses must be nonzero\n${invalidResult.stdout}\n${invalidResult.stderr}`);
+  const invalidSummary = JSON.parse(invalidResult.stdout);
+  assert.equal(invalidSummary.filesRead, 0);
+  assert.equal(invalidSummary.unsupported.length, 3);
+  assert.deepEqual(invalidSummary.counts, { passed: 0, failed: 0, skipped: 0, retried: 0 });
+});
+
+test('summarize-test-report rejects missing or zero-signal reports and accepts uppercase extensions', () => {
+  const emptyFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'report-summary-empty-'));
+  const emptyResult = runRaw('node', ['website-test-automation/scripts/summarize-test-report.mjs', emptyFixture]);
+  assert.equal(emptyResult.status, 1, `empty report directories must be nonzero\n${emptyResult.stdout}\n${emptyResult.stderr}`);
+  const emptySummary = JSON.parse(emptyResult.stdout);
+  assert.equal(emptySummary.filesDiscovered, 0);
+  assert.equal(emptySummary.filesRead, 0);
+  assert.equal(emptySummary.incomplete, true);
+  assert.equal(emptySummary.noReportsDiscovered, true);
+  assert.match(emptySummary.nextAction, /no supported|report path|artifacts/i);
+
+  const unsupportedFile = path.join(emptyFixture, 'report.txt');
+  fs.writeFileSync(unsupportedFile, 'not a supported report');
+  const unsupportedResult = runRaw('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    unsupportedFile,
+  ]);
+  assert.equal(unsupportedResult.status, 2);
+  assert.match(unsupportedResult.stderr, /\.json|\.xml|extension/i);
+
+  for (const payload of [{}, { tests: [] }]) {
+    const zeroSignalFile = path.join(emptyFixture, `zero-signal-${Object.keys(payload).length}.json`);
+    fs.writeFileSync(zeroSignalFile, JSON.stringify(payload));
+    const zeroSignalResult = runRaw('node', [
+      'website-test-automation/scripts/summarize-test-report.mjs',
+      zeroSignalFile,
+    ]);
+    assert.equal(zeroSignalResult.status, 1, `zero-signal JSON must be nonzero\n${zeroSignalResult.stdout}\n${zeroSignalResult.stderr}`);
+    const zeroSignalSummary = JSON.parse(zeroSignalResult.stdout);
+    assert.equal(zeroSignalSummary.filesRead, 0);
+    assert.equal(zeroSignalSummary.incomplete, true);
+    assert.equal(zeroSignalSummary.unsupported.length, 1);
+  }
+
+  const uppercaseJson = path.join(emptyFixture, 'passing.JSON');
+  fs.writeFileSync(uppercaseJson, JSON.stringify({ title: 'uppercase JSON', status: 'passed' }));
+  const uppercaseJsonResult = runJson('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    uppercaseJson,
+  ]);
+  assert.equal(uppercaseJsonResult.jsonFilesRead, 1);
+  assert.equal(uppercaseJsonResult.counts.passed, 1);
+
+  const uppercaseXml = path.join(emptyFixture, 'passing.XML');
+  fs.writeFileSync(uppercaseXml, '<testsuite tests="1"><testcase name="uppercase XML"/></testsuite>');
+  const uppercaseXmlResult = runJson('node', [
+    'website-test-automation/scripts/summarize-test-report.mjs',
+    uppercaseXml,
+  ]);
+  assert.equal(uppercaseXmlResult.xmlFilesRead, 1);
+  assert.equal(uppercaseXmlResult.counts.passed, 1);
 });
 
 test('summarize-test-report caps details without losing aggregate counts', () => {
@@ -2074,6 +2693,55 @@ test('canonical case routing fields are required, typed, and enum validated', ()
   ]) {
     assert.match(errorsFor(name), new RegExp(`invalid ${field}: "${value}"`));
   }
+});
+
+test('automation target must be a string before validation or export', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-automation-target-type-'));
+  const input = path.join(dir, 'numeric-target.json');
+  const output = path.join(dir, 'numeric-target.csv');
+  fs.writeFileSync(input, JSON.stringify(validTestCase({ automation: { recommended: false, target: 42 } })));
+
+  const validation = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', input]);
+  assert.equal(validation.status, 1, `numeric target must fail validation\n${validation.stdout}\n${validation.stderr}`);
+  assert.match(JSON.parse(validation.stdout).errors.join('\n'), /automation\.target must be a string/i);
+
+  const exported = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    input,
+    '--format=csv',
+    `--out=${output}`,
+  ]);
+  assert.equal(exported.status, 1, `numeric target must fail export\n${exported.stdout}\n${exported.stderr}`);
+  assert.equal(fs.existsSync(output), false);
+});
+
+test('required testcase identity and action fields reject whitespace-only shells', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-whitespace-shell-'));
+  const input = path.join(dir, 'whitespace-shell.json');
+  const output = path.join(dir, 'whitespace-shell.csv');
+  fs.writeFileSync(input, JSON.stringify(validTestCase({
+    id: '   ',
+    title: '\t ',
+    steps: ['   '],
+    expected: ['\n'],
+  })));
+
+  const validation = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', input]);
+  assert.equal(validation.status, 1, `whitespace-only case must fail\n${validation.stdout}\n${validation.stderr}`);
+  const errors = JSON.parse(validation.stdout).errors.join('\n');
+  assert.match(errors, /missing required field: id/i);
+  assert.match(errors, /missing required field: title/i);
+  assert.match(errors, /steps must contain at least one nonblank string/i);
+  assert.match(errors, /expected must contain at least one nonblank string/i);
+
+  const exported = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    input,
+    '--format=csv',
+    `--out=${output}`,
+  ]);
+  assert.equal(exported.status, 1, `whitespace-only case must not export\n${exported.stdout}\n${exported.stderr}`);
+  assert.equal(fs.existsSync(output), false);
 });
 
 test('canonical case routing rejects unresolved risk automation conflicts', () => {
@@ -2672,6 +3340,17 @@ test('validate-testcases rejects unsafe keys, broken quotes, and malformed flow 
     ],
     'constructor.yaml': [...baseLines, 'constructor: unsafe'],
     'prototype.yaml': [...baseLines, 'prototype: unsafe'],
+    'duplicate-block.yaml': [...baseLines, 'priority: P0'],
+    'duplicate-nested.yaml': baseLines.flatMap((line) =>
+      line.startsWith('automation:')
+        ? ['automation:', '  recommended: false', '  target: manual', '  target: durable-regression']
+        : [line],
+    ),
+    'duplicate-flow.yaml': baseLines.map((line) =>
+      line.startsWith('automation:')
+        ? 'automation: {recommended: false, target: durable-regression, target: manual}'
+        : line,
+    ),
   };
   for (const [name, lines] of Object.entries(cases)) fs.writeFileSync(path.join(dir, name), lines.join('\n'));
 
@@ -2787,6 +3466,39 @@ test('test-case collection skips directory symlinks and rejects direct symlink o
   assert.match(unsupportedResult.stderr, /supported YAML\/JSON file/i);
 });
 
+test('test-case CLIs reject oversized inputs without export artifacts', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-oversized-input-'));
+  const input = path.join(dir, 'oversized.json');
+  const output = path.join(dir, 'oversized.csv');
+  fs.writeFileSync(input, '');
+  fs.truncateSync(input, 2 * 1024 * 1024 + 1);
+
+  const validation = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', input]);
+  assert.notEqual(validation.status, 0);
+  assert.match(`${validation.stdout}\n${validation.stderr}`, /size|byte|2 MiB|2097152/i);
+
+  const exported = runRaw('node', [
+    'website-test-automation/scripts/export-testcases.mjs',
+    input,
+    '--format=csv',
+    `--out=${output}`,
+  ]);
+  assert.notEqual(exported.status, 0);
+  assert.match(`${exported.stdout}\n${exported.stderr}`, /size|byte|2 MiB|2097152/i);
+  assert.equal(fs.existsSync(output), false);
+});
+
+test('test-case CLIs share one aggregate load budget across all files', () => {
+  for (const rel of [
+    'website-test-automation/scripts/validate-testcases.mjs',
+    'website-test-automation/scripts/export-testcases.mjs',
+  ]) {
+    const source = read(rel);
+    assert.match(source, /const loadBudget = createCaseLoadBudget\(\)/);
+    assert.match(source, /loadCases\(file, loadBudget\)/);
+  }
+});
+
 test('loadCases re-checks and rejects symbolic links immediately before reading', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-loader-symlink-'));
   const target = path.join(dir, 'target.json');
@@ -2802,6 +3514,25 @@ test('loadCases re-checks and rejects symbolic links immediately before reading'
 
   assert.equal(result.status, 1, `loader must reject symlink\n${result.stdout}\n${result.stderr}`);
   assert.match(result.stderr, /symbolic link/i);
+});
+
+test('loadCases rejects a scanned parent directory swapped to an external symlink', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-parent-swap-'));
+  const subdirectory = path.join(fixture, 'sub');
+  const movedSubdirectory = path.join(fixture, 'sub-original');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-parent-swap-outside-'));
+  fs.mkdirSync(subdirectory);
+  fs.writeFileSync(path.join(subdirectory, 'case.json'), JSON.stringify({ id: 'inside' }));
+  fs.writeFileSync(path.join(outside, 'case.json'), JSON.stringify({ id: 'outside' }));
+
+  const [collected] = collectCaseFilesForSwapTest([fixture]);
+  fs.renameSync(subdirectory, movedSubdirectory);
+  fs.symlinkSync(outside, subdirectory);
+
+  assert.throws(
+    () => loadCasesForSwapTest(collected),
+    /parent changed|changed after collection|symbolic link/i,
+  );
 });
 
 test('loadCases re-checks and rejects non-regular files immediately before reading', () => {

@@ -33,14 +33,14 @@ Tier 3: public skill behavior, helper scripts, output contracts, safety/redactio
 
 ## Verification Result
 
-- Source package: `npm run validate` passed 104 repository checks plus agent-workflow validation; the local skill validator and the official `quick_validate.py` both exited 0; `git diff --check` passed.
+- Source package: `npm run validate` passed 122 repository checks plus agent-workflow validation; the local skill validator and the official `quick_validate.py` both exited 0; `git diff --check` passed.
 - Preserved-baseline forward test: the same fresh, temporary support-console artifact was run against `16f39e8` and the hardened branch. Observable changes were:
   - stack discovery moved from zero framework/test-runner signals to three workspace packages with Next.js, React, Express, Playwright, and Vitest signals;
   - route inventory moved from two incomplete routes, including a commented false-positive DELETE, to `GET|POST|HEAD /api/tickets`, `/inbox/compose`, and the real Express PATCH route;
   - report summarization moved from silently reading 20/21 files and reporting zero failures to reading 21/21, reporting the late failure, and rendering its Authorization value as `[REDACTED]`;
   - a case with string-valued `steps` and `expected` moved from false-green exit 0 to two schema errors and exit 1.
 - Installed copy: `/Users/chenyang/.codex/skills/website-test-automation` is byte-for-byte aligned with the source skill (`diff -qr` empty), both validators passed, and installed-copy stack, route, report, invalid-case, and readiness smokes matched source behavior. Readiness reports `contractScore: 100`, evidence-calibrated `overallScore: 89`, and no bundled real-project evidence claim.
-- Independent reviews closed all reported Critical/Important findings; the final route and discovery reviews returned `Ready: yes`.
+- Independent reviews closed all reported Critical/Important findings; the final whole-package audit returned `Critical: 0`, `Important: 0`, `Minor: 0`, and `Ready: yes` after re-running the adversarial readiness, route, report-safety, schema, and metadata reproducers.
 - Residual assumption: static symlink, inode, containment, same-file-descriptor, and resource-bound tests cover the intended local threat model; the suite does not deterministically force an attacker-controlled parent-directory swap between every filesystem syscall.
 
 ## Final Outcome

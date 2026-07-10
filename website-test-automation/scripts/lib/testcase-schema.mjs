@@ -158,7 +158,8 @@ export function validateCase(testCase) {
   }
 
   for (const field of CORE_FIELDS) {
-    if (!hasOwn(testCase, field) || testCase[field] === null || testCase[field] === '') {
+    if (!hasOwn(testCase, field) || testCase[field] === null ||
+      (typeof testCase[field] === 'string' && testCase[field].trim() === '')) {
       errors.push(`missing required field: ${field}`);
     }
   }
@@ -166,6 +167,11 @@ export function validateCase(testCase) {
   for (const field of STRING_FIELDS) validateOwnType(errors, testCase, field, (value) => typeof value === 'string', 'a string');
   for (const field of STRING_ARRAY_FIELDS) {
     validateOwnType(errors, testCase, field, isStringArray, 'an array of strings');
+  }
+  for (const field of ['steps', 'expected']) {
+    if (hasOwn(testCase, field) && isStringArray(testCase[field]) && !hasNonEmptyTextEntry(testCase[field])) {
+      errors.push(`${field} must contain at least one nonblank string`);
+    }
   }
   validateOwnType(errors, testCase, 'logic_risk', (value) => typeof value === 'boolean', 'a boolean');
   validateOwnType(errors, testCase, 'source', isPlainObject, 'a plain object');
@@ -182,6 +188,9 @@ export function validateCase(testCase) {
   if (isPlainObject(testCase.automation)) {
     if (hasOwn(testCase.automation, 'recommended') && typeof testCase.automation.recommended !== 'boolean') {
       errors.push('automation.recommended must be a boolean');
+    }
+    if (hasOwn(testCase.automation, 'target') && typeof testCase.automation.target !== 'string') {
+      errors.push('automation.target must be a string');
     }
     if (hasOwn(testCase.automation, 'preferred_tools') && !isStringArray(testCase.automation.preferred_tools)) {
       errors.push('automation.preferred_tools must be an array of strings');
