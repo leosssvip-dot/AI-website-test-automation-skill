@@ -117,6 +117,17 @@ const STRING_ARRAY_FIELDS = [
   'unknowns',
 ];
 const SOURCE_FIELDS = ['docs', 'code', 'observed'];
+const LEGACY_AUTOMATION_PROJECTIONS = Object.freeze({
+  'automate-now': Object.freeze({ recommended: true, targets: Object.freeze(['durable-regression', 'api-or-component']) }),
+  'browser-smoke': Object.freeze({ recommended: true, targets: Object.freeze(['browser-agent-smoke']) }),
+  'exploratory': Object.freeze({ recommended: false, targets: Object.freeze(['exploratory']) }),
+  'manual': Object.freeze({ recommended: false, targets: Object.freeze(['manual']) }),
+  'provider-live': Object.freeze({ recommended: false, targets: Object.freeze(['manual']) }),
+  'automate-later': Object.freeze({ recommended: false, targets: Object.freeze(['not-automated-risk-note']) }),
+  'human-logic-risk': Object.freeze({ recommended: false, targets: Object.freeze(['not-automated-risk-note']) }),
+  'risk-note': Object.freeze({ recommended: false, targets: Object.freeze(['not-automated-risk-note']) }),
+  'not-in-scope': Object.freeze({ recommended: false, targets: Object.freeze(['not-automated-risk-note']) }),
+});
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const isStringArray = (value) => Array.isArray(value) && value.every((item) => typeof item === 'string');
@@ -182,13 +193,14 @@ export function validateCase(testCase) {
   }
 
   for (const field of ['priority', 'type', 'source_status', 'surface', 'layer', 'disposition']) {
-    if (hasOwn(testCase, field) && !ENUMS[field].includes(testCase[field])) {
+    if (hasOwn(testCase, field) && typeof testCase[field] === 'string' && !ENUMS[field].includes(testCase[field])) {
       errors.push(`invalid ${field}: "${testCase[field]}" (allowed: ${ENUMS[field].join(', ')})`);
     }
   }
   if (
     isPlainObject(testCase.automation) &&
     hasOwn(testCase.automation, 'target') &&
+    typeof testCase.automation.target === 'string' &&
     !ENUMS['automation.target'].includes(testCase.automation.target)
   ) {
     errors.push(
@@ -198,6 +210,27 @@ export function validateCase(testCase) {
 
   const disposition = hasOwn(testCase, 'disposition') ? testCase.disposition : undefined;
   const automationTarget = isPlainObject(testCase.automation) ? testCase.automation.target : undefined;
+  const legacyProjection = hasOwn(LEGACY_AUTOMATION_PROJECTIONS, disposition)
+    ? LEGACY_AUTOMATION_PROJECTIONS[disposition]
+    : undefined;
+  if (
+    legacyProjection &&
+    isPlainObject(testCase.automation) &&
+    hasOwn(testCase.automation, 'recommended') &&
+    typeof testCase.automation.recommended === 'boolean' &&
+    testCase.automation.recommended !== legacyProjection.recommended
+  ) {
+    errors.push(`disposition ${disposition} requires automation.recommended=${legacyProjection.recommended}`);
+  }
+  if (
+    legacyProjection &&
+    isPlainObject(testCase.automation) &&
+    hasOwn(testCase.automation, 'target') &&
+    typeof testCase.automation.target === 'string' &&
+    !legacyProjection.targets.includes(testCase.automation.target)
+  ) {
+    errors.push(`disposition ${disposition} requires automation.target: ${legacyProjection.targets.join(', ')}`);
+  }
   if (disposition === 'human-logic-risk' && testCase.logic_risk !== true) {
     errors.push('disposition human-logic-risk requires logic_risk: true');
   }

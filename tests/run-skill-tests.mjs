@@ -94,6 +94,21 @@ function validYamlLines() {
   ];
 }
 
+function validateCaseFiles(prefix, casesByName) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  for (const [name, testCase] of Object.entries(casesByName)) {
+    fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(testCase));
+  }
+  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', dir]);
+  const summary = JSON.parse(result.stdout);
+  const errorsFor = (name) => {
+    const report = summary.files.find((file) => file.file.endsWith(`${name}.json`));
+    assert.notEqual(report, undefined, `missing validation report for ${name}`);
+    return report.errors.join('\n');
+  };
+  return { result, summary, errorsFor };
+}
+
 function test(name, fn) {
   try {
     fn();
@@ -871,92 +886,212 @@ test('response-only test case template matches required schema fields', () => {
 });
 
 test('canonical case routing fields are required, typed, and enum validated', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-routing-fields-'));
-  const file = path.join(dir, 'routing-fields.json');
   const without = (field) => {
     const testCase = validTestCase();
     delete testCase[field];
     return testCase;
   };
-  fs.writeFileSync(
-    file,
-    JSON.stringify([
-      without('surface'),
-      without('layer'),
-      without('disposition'),
-      validTestCase({ surface: [] }),
-      validTestCase({ surface: 'desktop' }),
-      validTestCase({ layer: false }),
-      validTestCase({ layer: 'database' }),
-      validTestCase({ disposition: 42 }),
-      validTestCase({ disposition: 'ship-it' }),
-    ]),
-  );
-
-  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', file]);
+  const { result, errorsFor } = validateCaseFiles('testcase-routing-fields-', {
+    'missing-surface': without('surface'),
+    'missing-layer': without('layer'),
+    'missing-disposition': without('disposition'),
+    'typed-surface': validTestCase({ surface: [] }),
+    'invalid-surface': validTestCase({ surface: 'desktop' }),
+    'typed-layer': validTestCase({ layer: false }),
+    'invalid-layer': validTestCase({ layer: 'database' }),
+    'typed-disposition': validTestCase({ disposition: 42 }),
+    'invalid-disposition': validTestCase({ disposition: 'ship-it' }),
+  });
   assert.equal(result.status, 1, `invalid routing fields must fail\n${result.stdout}\n${result.stderr}`);
-  const errors = JSON.parse(result.stdout).errors.join('\n');
-  for (const message of [
-    'missing required field: surface',
-    'missing required field: layer',
-    'missing required field: disposition',
-    'surface must be a string',
-    'invalid surface: "desktop"',
-    'layer must be a string',
-    'invalid layer: "database"',
-    'disposition must be a string',
-    'invalid disposition: "ship-it"',
+  for (const [name, field] of [
+    ['missing-surface', 'surface'],
+    ['missing-layer', 'layer'],
+    ['missing-disposition', 'disposition'],
   ]) {
-    assert.match(errors, new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(errorsFor(name), new RegExp(`missing required field: ${field}`));
+  }
+  for (const [name, field] of [
+    ['typed-surface', 'surface'],
+    ['typed-layer', 'layer'],
+    ['typed-disposition', 'disposition'],
+  ]) {
+    const errors = errorsFor(name);
+    assert.match(errors, new RegExp(`${field} must be a string`));
+    assert.doesNotMatch(errors, new RegExp(`invalid ${field}:`));
+  }
+  for (const [name, field, value] of [
+    ['invalid-surface', 'surface', 'desktop'],
+    ['invalid-layer', 'layer', 'database'],
+    ['invalid-disposition', 'disposition', 'ship-it'],
+  ]) {
+    assert.match(errorsFor(name), new RegExp(`invalid ${field}: "${value}"`));
   }
 });
 
 test('canonical case routing rejects unresolved risk automation conflicts', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-routing-conflicts-'));
-  const file = path.join(dir, 'routing-conflicts.json');
-  fs.writeFileSync(
-    file,
-    JSON.stringify([
-      validTestCase({ disposition: 'human-logic-risk', logic_risk: false }),
-      validTestCase({ disposition: 'exploratory', logic_risk: true, why_unreasonable: '' }),
-      validTestCase({
+  const scenarios = {
+    'human-without-risk': {
+      testCase: validTestCase({
+        disposition: 'human-logic-risk',
+        logic_risk: false,
+        automation: { recommended: false, target: 'not-automated-risk-note', preferred_tools: [] },
+      }),
+      expected: 'disposition human-logic-risk requires logic_risk: true',
+    },
+    'risk-without-reason': {
+      testCase: validTestCase({
+        disposition: 'exploratory',
+        logic_risk: true,
+        why_unreasonable: '',
+        automation: { recommended: false, target: 'exploratory', preferred_tools: [] },
+      }),
+      expected: 'logic_risk true requires non-empty why_unreasonable',
+    },
+    'mismatch-automate-now': {
+      testCase: validTestCase({
         source_status: 'mismatch',
         mismatch: 'Requirements and implementation disagree.',
         disposition: 'automate-now',
+        automation: { recommended: true, target: 'api-or-component', preferred_tools: [] },
       }),
-      validTestCase({
+      expected: 'source_status mismatch cannot use disposition automate-now',
+    },
+    'mismatch-durable': {
+      testCase: validTestCase({
         source_status: 'mismatch',
         mismatch: 'Requirements and implementation disagree.',
         disposition: 'automate-later',
         automation: { recommended: false, target: 'durable-regression', preferred_tools: [] },
       }),
-      validTestCase({
+      expected: 'source_status mismatch cannot use automation.target durable-regression',
+    },
+    'logic-risk-automate-now': {
+      testCase: validTestCase({
         logic_risk: true,
         why_unreasonable: 'The current behavior is unsafe for users.',
         disposition: 'automate-now',
+        automation: { recommended: true, target: 'api-or-component', preferred_tools: [] },
       }),
-      validTestCase({
+      expected: 'logic_risk true cannot use disposition automate-now',
+    },
+    'logic-risk-durable': {
+      testCase: validTestCase({
         logic_risk: true,
         why_unreasonable: 'The current behavior is unsafe for users.',
         disposition: 'exploratory',
         automation: { recommended: false, target: 'durable-regression', preferred_tools: [] },
       }),
+      expected: 'logic_risk true cannot use automation.target durable-regression',
+    },
+  };
+  const { result, errorsFor } = validateCaseFiles(
+    'testcase-routing-conflicts-',
+    Object.fromEntries(Object.entries(scenarios).map(([name, scenario]) => [name, scenario.testCase])),
+  );
+  assert.equal(result.status, 1, `routing conflicts must fail\n${result.stdout}\n${result.stderr}`);
+  for (const [name, scenario] of Object.entries(scenarios)) {
+    assert.match(errorsFor(name), new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('canonical dispositions reject contradictory legacy automation projections', () => {
+  const incompatible = {
+    'automate-now': validTestCase({
+      disposition: 'automate-now',
+      automation: { recommended: false, target: 'manual', preferred_tools: [] },
+    }),
+    'browser-smoke': validTestCase({
+      disposition: 'browser-smoke',
+      automation: { recommended: false, target: 'durable-regression', preferred_tools: [] },
+    }),
+    'exploratory': validTestCase({
+      disposition: 'exploratory',
+      automation: { recommended: true, target: 'manual', preferred_tools: [] },
+    }),
+    'manual': validTestCase({
+      disposition: 'manual',
+      automation: { recommended: true, target: 'exploratory', preferred_tools: [] },
+    }),
+    'provider-live': validTestCase({
+      disposition: 'provider-live',
+      automation: { recommended: true, target: 'exploratory', preferred_tools: [] },
+    }),
+    'automate-later': validTestCase({
+      disposition: 'automate-later',
+      automation: { recommended: true, target: 'manual', preferred_tools: [] },
+    }),
+    'human-logic-risk': validTestCase({
+      disposition: 'human-logic-risk',
+      logic_risk: true,
+      why_unreasonable: 'The current behavior is unsafe for users.',
+      automation: { recommended: true, target: 'manual', preferred_tools: [] },
+    }),
+    'risk-note': validTestCase({
+      disposition: 'risk-note',
+      automation: { recommended: true, target: 'manual', preferred_tools: [] },
+    }),
+    'not-in-scope': validTestCase({
+      disposition: 'not-in-scope',
+      automation: { recommended: true, target: 'manual', preferred_tools: [] },
+    }),
+  };
+  const expected = {
+    'automate-now': { recommended: 'true', targets: 'durable-regression, api-or-component' },
+    'browser-smoke': { recommended: 'true', targets: 'browser-agent-smoke' },
+    'exploratory': { recommended: 'false', targets: 'exploratory' },
+    'manual': { recommended: 'false', targets: 'manual' },
+    'provider-live': { recommended: 'false', targets: 'manual' },
+    'automate-later': { recommended: 'false', targets: 'not-automated-risk-note' },
+    'human-logic-risk': { recommended: 'false', targets: 'not-automated-risk-note' },
+    'risk-note': { recommended: 'false', targets: 'not-automated-risk-note' },
+    'not-in-scope': { recommended: 'false', targets: 'not-automated-risk-note' },
+  };
+  const { result, errorsFor } = validateCaseFiles('testcase-legacy-routing-conflicts-', incompatible);
+  assert.equal(result.status, 1, `legacy routing conflicts must fail\n${result.stdout}\n${result.stderr}`);
+  for (const [disposition, projection] of Object.entries(expected)) {
+    const errors = errorsFor(disposition);
+    assert.match(errors, new RegExp(`disposition ${disposition} requires automation\\.recommended=${projection.recommended}`));
+    assert.match(errors, new RegExp(`disposition ${disposition} requires automation\\.target: ${projection.targets}`));
+  }
+});
+
+test('canonical dispositions accept matching or omitted legacy automation projections', () => {
+  const compatible = {
+    'automate-now': [true, 'durable-regression'],
+    'browser-smoke': [true, 'browser-agent-smoke'],
+    'exploratory': [false, 'exploratory'],
+    'manual': [false, 'manual'],
+    'provider-live': [false, 'manual'],
+    'automate-later': [false, 'not-automated-risk-note'],
+    'human-logic-risk': [false, 'not-automated-risk-note'],
+    'risk-note': [false, 'not-automated-risk-note'],
+    'not-in-scope': [false, 'not-automated-risk-note'],
+  };
+  const cases = Object.fromEntries(
+    Object.entries(compatible).map(([disposition, [recommended, target]]) => [
+      disposition,
+      validTestCase({
+        disposition,
+        logic_risk: disposition === 'human-logic-risk',
+        why_unreasonable: disposition === 'human-logic-risk' ? 'The current behavior is unsafe for users.' : '',
+        preconditions: recommended ? ['The test environment is controlled.'] : [],
+        automation: { recommended, target, preferred_tools: [] },
+      }),
     ]),
   );
+  cases['legacy-omitted'] = validTestCase({ automation: {} });
+  cases['recommended-only'] = validTestCase({
+    disposition: 'automate-now',
+    preconditions: ['The test environment is controlled.'],
+    automation: { recommended: true },
+  });
+  cases['target-only'] = validTestCase({
+    disposition: 'browser-smoke',
+    automation: { target: 'browser-agent-smoke' },
+  });
 
-  const result = runRaw('node', ['website-test-automation/scripts/validate-testcases.mjs', file]);
-  assert.equal(result.status, 1, `routing conflicts must fail\n${result.stdout}\n${result.stderr}`);
-  const errors = JSON.parse(result.stdout).errors.join('\n');
-  for (const message of [
-    'disposition human-logic-risk requires logic_risk: true',
-    'logic_risk true requires non-empty why_unreasonable',
-    'source_status mismatch cannot use disposition automate-now',
-    'source_status mismatch cannot use automation.target durable-regression',
-    'logic_risk true cannot use disposition automate-now',
-    'logic_risk true cannot use automation.target durable-regression',
-  ]) {
-    assert.match(errors, new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  }
+  const { result } = validateCaseFiles('testcase-legacy-routing-compatible-', cases);
+  assert.equal(result.status, 0, `matching or omitted legacy projections must pass\n${result.stdout}\n${result.stderr}`);
 });
 
 test('canonical case routing fields stay aligned across case artifacts', () => {
@@ -973,6 +1108,16 @@ test('canonical case routing fields stay aligned across case artifacts', () => {
       assert.match(contents, new RegExp(`^\\s*${field}`, 'm'), `${rel} must include ${field}`);
     }
   }
+
+  const schemaReference = read('website-test-automation/references/testcase-schema.md');
+  assert.match(schemaReference, /## Migration And Compatibility/);
+  assert.match(schemaReference, /existing case artifacts[\s\S]*must add[\s\S]*surface[\s\S]*layer[\s\S]*disposition/i);
+  assert.match(schemaReference, /automation\.recommended[\s\S]*automation\.target[\s\S]*optional compatibility projections/i);
+
+  const responseCase = read('website-test-automation/references/output-templates.md')
+    .split('## Source-Backed Test Cases')[1]
+    .split('## Automation Selection')[0];
+  assert.match(responseCase, /disposition:\s*automate-now[\s\S]*recommended:\s*true[\s\S]*target:\s*durable-regression/);
 
   const prd = read('docs/PRD.md');
   const fr2 = prd.match(/### FR-2: Test Case Authoring Core\n([\s\S]*?)(?=\n### )/)?.[1] || '';
@@ -1108,7 +1253,7 @@ test('validate-testcases parses sequence, multi-document, and JSON inputs', () =
       '  - returns 200',
       'automation:',
       '  recommended: false',
-      '  target: api-or-component',
+      '  target: manual',
       '---',
       'id: TC-A-002',
       'title: Second',

@@ -63,6 +63,18 @@ unknowns: []
 
 `surface` names the product boundary under test, `layer` names where the check earns confidence, and `disposition` records the next action chosen by the disposition gate. Keep the legacy `type` and `automation.target` fields for compatibility, but do not use either as a substitute for these three routing fields.
 
+## Migration And Compatibility
+
+Existing case artifacts must add `surface`, `layer`, and `disposition`; these are required core fields, so older cases do not validate unchanged. `automation.recommended` and `automation.target` remain optional compatibility projections. Either subfield may be omitted independently, but when present it must agree with canonical `disposition`:
+
+| `disposition` | `automation.recommended` when present | `automation.target` when present |
+| --- | --- | --- |
+| `automate-now` | `true` | `durable-regression` or `api-or-component` |
+| `browser-smoke` | `true` | `browser-agent-smoke` |
+| `exploratory` | `false` | `exploratory` |
+| `manual`, `provider-live` | `false` | `manual` |
+| `automate-later`, `human-logic-risk`, `risk-note`, `not-in-scope` | `false` | `not-automated-risk-note` |
+
 ## Review Rules
 
 - Every P0/P1 case needs at least one non-empty source evidence string or a non-empty string in `unknowns`; empty or whitespace-only entries do not count.

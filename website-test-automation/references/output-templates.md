@@ -99,8 +99,8 @@ Use this when the user asked for review, planning, or agent-style output without
   negative_cases: []
   data_needs: []
   automation:
-    recommended:
-    target:
+    recommended: true
+    target: durable-regression
     preferred_tools: []
   evidence:
     required: []
