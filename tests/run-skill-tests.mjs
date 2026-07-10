@@ -1346,6 +1346,22 @@ test('validate-testcases rejects missing, unknown, duplicate, conflicting, or un
   }
 });
 
+test('test-case CLIs accept one help option and reject repeated help options', () => {
+  for (const script of ['validate-testcases.mjs', 'export-testcases.mjs']) {
+    const scriptPath = path.join(skillRoot, 'scripts', script);
+    for (const args of [['--help'], ['-h']]) {
+      const result = runRaw('node', [scriptPath, ...args]);
+      assert.equal(result.status, 0, `${script} ${args.join(' ')} must show help`);
+      assert.match(result.stdout, /Usage:/);
+    }
+    for (const args of [['--help', '--help'], ['-h', '--help']]) {
+      const result = runRaw('node', [scriptPath, ...args]);
+      assert.equal(result.status, 2, `${script} ${args.join(' ')} must reject repeated help`);
+      assert.match(result.stdout, /Usage:/);
+    }
+  }
+});
+
 test('export-testcases rejects missing, unknown, duplicate, conflicting, or unsupported options', () => {
   const input = 'tests/fixtures/testcases/valid.yaml';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testcase-duplicate-options-'));

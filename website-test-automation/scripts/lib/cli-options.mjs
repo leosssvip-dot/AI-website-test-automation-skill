@@ -8,6 +8,7 @@ export function parseCaseCliArguments(args, { formats, defaultFormat, allowOut =
   let outPath = null;
   let help = false;
   let optionsEnded = false;
+  let seenHelp = false;
   let seenFormat = false;
   let seenOut = false;
 
@@ -22,6 +23,8 @@ export function parseCaseCliArguments(args, { formats, defaultFormat, allowOut =
       continue;
     }
     if (arg === '--help' || arg === '-h') {
+      if (seenHelp) return invalid(defaultFormat);
+      seenHelp = true;
       help = true;
       continue;
     }
