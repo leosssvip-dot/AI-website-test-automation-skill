@@ -44,10 +44,17 @@ The manifest schema is:
 
 The gate requires all of the following:
 
-- `version` is exactly `1`, and `projects` contains at least two entries with at least two unique project IDs and at least two unique project targets. IDs and targets are normalized by trimming and case-folding before duplicate checks; duplicate normalized IDs or targets are invalid.
-- Every project has nonblank, non-placeholder string values for `id`, `target`, `command`, and `outcome`, plus a nonempty string array in `evidence`. Values such as TODO, TBD, pending, not run, replace, placeholder, and example-only are invalid even when hidden behind a wrapper such as `Status:` or a Markdown heading. An outcome or evidence report that also records a concrete result such as `12 tests passed; TODO follow-up` is not placeholder-only; this exception does not apply to `id`, `target`, or `command`.
-- Every item in `evidence` is a nonblank path relative to the scored root and resolves to an existing ordinary non-symlink file inside that root. The file contents must be nonempty and not placeholder-only. Placeholder words in a legitimate filename do not invalidate the path. Absolute paths, traversal, symbolic links in the final path or parent chain, directories, text files larger than 2 MiB, and paths outside the root are invalid.
-- The manifest itself is root-contained, valid JSON, no larger than 2 MiB, and an ordinary non-symlink file whose parent chain contains no symbolic links. Ordinary text files larger than 2 MiB do not contribute file-path or content evidence to workstream scores.
+- `version` is exactly `1`, and `projects` contains at least two entries with at least two unique project IDs and at least two unique project targets. URL targets normalize scheme and host case, default ports, credentials, query strings, trailing slashes, and fragments; local targets normalize case, separators, whitespace, and trailing slashes. Equivalent normalized targets are duplicates.
+- Every project has nonblank, non-placeholder `id`, `target`, and `command` strings. Exact or wrapped placeholders are invalid, but legitimate compound names such as `todo-app`, `https://todo.test`, and `pending-orders` are allowed.
+- Every outcome or evidence report must contain a concrete observed result signal such as passed, failed, verified, observed, completed, succeeded, a test/check/assertion count, an exit code, or an HTTP status. Result verbs require at least three substantive context tokens, so bare `passed`, `verified`, `worked`, `looks good`, and expectation-only text are invalid. When a placeholder is present, the concrete result must appear first: `12 tests passed; TODO follow-up` is valid, while `TODO: expected status 200` is not.
+- Every item in `evidence` is a nonblank root-relative path that resolves to an existing ordinary non-symlink file inside the root. Each project needs at least one evidence path not reused by another project. Placeholder words in a legitimate filename do not invalidate the path. Absolute paths, traversal, symbolic links, directories, text files larger than 2 MiB, and outside-root paths are invalid.
+- The manifest itself is root-contained, valid JSON, no larger than 2 MiB, and an ordinary non-symlink file. A final manifest symbolic link is reported as an unsafe manifest candidate without reading its target.
+
+## Resource Budgets
+
+- Global limits are 10,000 scanned files, 32 MiB of scored text, and 20 manifest candidates. Extra content is ignored, reported in `resourceBudget.warnings`, and prevents 90+.
+- Per-manifest limits are 100 projects, 20 evidence refs per project, 200 total refs, and 16 MiB of unique evidence bytes. Exceeding a limit is an auditable failure reason.
+- Evidence is cached by resolved root-contained path for each manifest. Repeated references increment `evidenceCacheHits` but do not reread the file or multiply `uniqueEvidenceBytes`.
 
 This gate is intentionally fail-closed: malformed manifests and unreadable or unsafe evidence keep the overall score capped at 89 and appear in `evidenceCalibration.reasons`. A 90+ result is still a candidate assessment of documented process evidence, not a runtime quality guarantee; the scorer does not execute the recorded commands or independently verify the product outcome.
 

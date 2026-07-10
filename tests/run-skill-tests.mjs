@@ -729,7 +729,7 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
   const evidenceDir = path.join(fixture, 'real-project-validation');
   fs.mkdirSync(evidenceDir, { recursive: true });
   fs.writeFileSync(
-    path.join(evidenceDir, 'project-alpha-pending-regressions.md'),
+    path.join(evidenceDir, 'pending-orders-evidence.md'),
     'Project alpha critical flow passed 12 deterministic assertions. TODO: investigate one low-priority follow-up.\n',
   );
   fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta critical flow passed 9 deterministic assertions.\n');
@@ -739,7 +739,9 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
       version: 1,
       projects: [
         {
-          ...readinessProject('project-alpha', 'real-project-validation/project-alpha-pending-regressions.md'),
+          ...readinessProject('todo-app', 'real-project-validation/pending-orders-evidence.md'),
+          target: 'https://todo.test/pending-orders',
+          command: 'npm test -- pending-orders',
           outcome: '12 tests passed; 1 low-priority follow-up remains pending',
         },
         readinessProject('project-beta', 'real-project-validation/project-beta.md'),
@@ -780,6 +782,55 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
         projects: [{ ...projects[0], outcome: 'Status: pending' }, projects[1]],
       }),
     },
+    {
+      name: 'weak outcome without concrete proof',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], outcome: 'worked' }, projects[1]],
+      }),
+    },
+    ...['passed', 'verified'].map((outcome) => ({
+      name: `bare ${outcome} outcome without concrete context`,
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], outcome }, projects[1]],
+      }),
+    })),
+    {
+      name: 'quoted placeholder identity',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], id: '"TODO"' }, projects[1]],
+      }),
+    },
+    {
+      name: 'equals-wrapped placeholder before concrete outcome',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], outcome: 'Status=pending; 12 tests passed' }, projects[1]],
+      }),
+    },
+    {
+      name: 'multiline expectation-only evidence',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'Expected:\nHTTP status 200\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'weak evidence without concrete proof',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'looks good\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'expectation-only evidence after placeholder',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'TODO: expected status 200\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
     ...['id', 'target', 'command'].map((field) => ({
       name: `placeholder ${field} with concrete-result bait`,
       setup: ({ projects, writeManifest }) => writeManifest({
@@ -814,7 +865,32 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
         version: 1,
         projects: [
           projects[0],
-          { ...projects[1], target: `  ${projects[0].target.toUpperCase()}  ` },
+          { ...projects[1], target: 'HTTPS://user:pass@PROJECT-ALPHA.TEST:443/critical-flow/?run=2#fragment' },
+        ],
+      }),
+    },
+    {
+      name: 'projects reuse the same evidence path',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [projects[0], { ...projects[1], evidence: projects[0].evidence }],
+      }),
+    },
+    {
+      name: 'projects reuse hard-linked evidence aliases',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.rmSync(path.join(evidenceDir, 'project-beta.md'));
+        fs.linkSync(path.join(evidenceDir, 'project-alpha.md'), path.join(evidenceDir, 'project-beta.md'));
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'duplicate normalized local project targets',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [
+          { ...projects[0], target: 'Local\\Pending-Orders\\' },
+          { ...projects[1], target: ' local/pending-orders/ ' },
         ],
       }),
     },
@@ -938,6 +1014,24 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
   assert.deepEqual(missingAuditReasons, []);
 });
 
+test('readiness scorer audits a final manifest symlink without reading its target', () => {
+  const fixture = copiedReadinessFixture('readiness-manifest-symlink-audit-');
+  const evidenceDir = path.join(fixture, 'case-studies');
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-manifest-symlink-target-'));
+  const outsideManifest = path.join(outsideDir, 'evidence-manifest.json');
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  fs.writeFileSync(outsideManifest, JSON.stringify({ version: 1, projects: [] }));
+  fs.symlinkSync(outsideManifest, path.join(evidenceDir, 'evidence-manifest.json'));
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(result.evidenceCalibration.manifestPath, 'case-studies/evidence-manifest.json');
+  const evaluation = result.evidenceCalibration.manifestEvaluations.find(
+    (candidate) => candidate.manifestPath === 'case-studies/evidence-manifest.json',
+  );
+  assert.equal(evaluation.reasons.some((reason) => /symbolic link/i.test(reason)), true);
+});
+
 test('readiness scorer keeps multi-manifest audit fields attributable', () => {
   const fixture = copiedReadinessFixture('readiness-multi-manifest-audit-');
   const caseStudies = path.join(fixture, 'case-studies');
@@ -1022,6 +1116,114 @@ test('readiness scorer enforces the 2 MiB text boundary', () => {
   assert.equal(productUnderstanding.score, 0);
 });
 
+test('readiness scorer fails closed at aggregate resource budgets', () => {
+  const failures = [];
+
+  const projectFixture = copiedReadinessFixture('readiness-project-budget-');
+  const projectDir = path.join(projectFixture, 'real-project-validation');
+  fs.mkdirSync(projectDir, { recursive: true });
+  fs.writeFileSync(path.join(projectDir, 'shared.md'), '100 checks passed with recorded assertions.\n');
+  fs.writeFileSync(
+    path.join(projectDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: Array.from({ length: 101 }, (_, index) =>
+        readinessProject(`project-${index}`, 'real-project-validation/shared.md')),
+    }),
+  );
+  const projectResult = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', projectFixture]);
+  if (projectResult.evidenceCalibration.hasProvenRealProjectEvidence ||
+      !projectResult.evidenceCalibration.reasons.some((reason) => /projects?.*100/i.test(reason))) {
+    failures.push('projects per manifest');
+  }
+
+  const refFixture = copiedReadinessFixture('readiness-ref-budget-');
+  const refDir = path.join(refFixture, 'real-project-validation');
+  fs.mkdirSync(refDir, { recursive: true });
+  fs.writeFileSync(path.join(refDir, 'project-alpha.md'), '21 checks passed with recorded assertions.\n');
+  fs.writeFileSync(path.join(refDir, 'project-beta.md'), '9 checks passed with recorded assertions.\n');
+  const refProjects = [
+    {
+      ...readinessProject('project-alpha', 'real-project-validation/project-alpha.md'),
+      evidence: Array.from({ length: 21 }, () => 'real-project-validation/project-alpha.md'),
+    },
+    readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+  ];
+  fs.writeFileSync(
+    path.join(refDir, 'evidence-manifest.json'),
+    JSON.stringify({ version: 1, projects: refProjects }),
+  );
+  const refResult = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', refFixture]);
+  if (refResult.evidenceCalibration.hasProvenRealProjectEvidence ||
+      !refResult.evidenceCalibration.reasons.some((reason) => /evidence refs?.*20|evidence.*20/i.test(reason))) {
+    failures.push('evidence refs per project');
+  }
+
+  const cacheFixture = copiedReadinessFixture('readiness-evidence-cache-');
+  const cacheDir = path.join(cacheFixture, 'real-project-validation');
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const alphaPrefix = '20 checks passed for alpha with recorded assertions.\n';
+  const betaPrefix = '20 checks passed for beta with recorded assertions.\n';
+  fs.writeFileSync(
+    path.join(cacheDir, 'alpha-2mib.md'),
+    alphaPrefix + 'x'.repeat(2 * 1024 * 1024 - Buffer.byteLength(alphaPrefix)),
+  );
+  fs.writeFileSync(
+    path.join(cacheDir, 'beta-2mib.md'),
+    betaPrefix + 'x'.repeat(2 * 1024 * 1024 - Buffer.byteLength(betaPrefix)),
+  );
+  fs.writeFileSync(
+    path.join(cacheDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [
+        {
+          ...readinessProject('project-alpha', 'real-project-validation/alpha-2mib.md'),
+          evidence: Array.from({ length: 20 }, () => 'real-project-validation/alpha-2mib.md'),
+        },
+        {
+          ...readinessProject('project-beta', 'real-project-validation/beta-2mib.md'),
+          evidence: Array.from({ length: 20 }, () => 'real-project-validation/beta-2mib.md'),
+        },
+      ],
+    }),
+  );
+  const cacheResult = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', cacheFixture]);
+  const cacheUsage = cacheResult.evidenceCalibration.manifestEvaluations[0]?.resourceUsage;
+  if (!cacheResult.evidenceCalibration.hasProvenRealProjectEvidence || !cacheUsage ||
+      cacheUsage.evidenceRefCount !== 40 || cacheUsage.uniqueEvidenceFileCount !== 2 ||
+      cacheUsage.evidenceCacheHits !== 38 || cacheUsage.uniqueEvidenceBytes !== 4 * 1024 * 1024) {
+    failures.push('evidence cache and unique byte budget');
+  }
+
+  const textFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-text-budget-'));
+  const oneMiB = 'x'.repeat(1024 * 1024);
+  for (let index = 0; index < 33; index += 1) {
+    fs.writeFileSync(path.join(textFixture, `evidence-${String(index).padStart(2, '0')}.md`), oneMiB);
+  }
+  const textResult = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', textFixture]);
+  if (!textResult.resourceBudget || textResult.resourceBudget.usage.scoredTextBytes > 32 * 1024 * 1024 ||
+      !textResult.resourceBudget.warnings.some((warning) => /32 MiB|33554432/.test(warning))) {
+    failures.push('aggregate scored text');
+  }
+
+  const candidateFixture = copiedReadinessFixture('readiness-manifest-candidate-budget-');
+  const outsideManifest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'manifest-candidate-target-')), 'manifest.json');
+  fs.writeFileSync(outsideManifest, JSON.stringify({ version: 1, projects: [] }));
+  for (let index = 0; index < 21; index += 1) {
+    const candidateDir = path.join(candidateFixture, 'case-studies', `candidate-${index}`);
+    fs.mkdirSync(candidateDir, { recursive: true });
+    fs.symlinkSync(outsideManifest, path.join(candidateDir, 'evidence-manifest.json'));
+  }
+  const candidateResult = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', candidateFixture]);
+  if (!candidateResult.resourceBudget.warnings.some((warning) => /manifest candidate.*20/i.test(warning)) ||
+      candidateResult.evidenceCalibration.manifestEvaluations.length > 20) {
+    failures.push('manifest candidate budget');
+  }
+
+  assert.deepEqual(failures, []);
+});
+
 test('readiness scorer ignores external keyword text reached through a normal text symlink', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-external-text-symlink-'));
   const caseStudies = path.join(fixture, 'case-studies');
@@ -1071,6 +1273,11 @@ test('readiness model documents the structured 90+ evidence gate and conditional
   assert.match(model, /unique project IDs[^\n]*unique project targets/i);
   assert.match(model, /Status:[^\n]*12 tests passed|12 tests passed[^\n]*TODO follow-up/i);
   assert.match(model, /outcome or evidence report/i);
+  assert.match(model, /concrete observed result/i);
+  assert.match(model, /evidence path[^\n]*not reused/i);
+  assert.match(model, /Resource Budgets/);
+  assert.match(model, /10,000[^\n]*32 MiB[^\n]*20 manifest candidates/i);
+  assert.match(model, /100 projects[^\n]*20 evidence refs[^\n]*200 total refs[^\n]*16 MiB/i);
   assert.match(model, /2 MiB/);
   assert.match(model, /ordinary non-symlink/i);
   assert.match(model, /Browser Evidence Condition/);
