@@ -730,7 +730,7 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
   fs.mkdirSync(evidenceDir, { recursive: true });
   fs.writeFileSync(
     path.join(evidenceDir, 'pending-orders-evidence.md'),
-    'Project alpha critical flow passed 12 deterministic assertions. TODO: investigate one low-priority follow-up.\n',
+    'planned 12; 12 passed; TODO follow-up\n',
   );
   fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta critical flow passed 9 deterministic assertions.\n');
   fs.writeFileSync(
@@ -742,7 +742,7 @@ test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', (
           ...readinessProject('todo-app', 'real-project-validation/pending-orders-evidence.md'),
           target: 'https://todo.test/pending-orders',
           command: 'npm test -- pending-orders',
-          outcome: '12 tests passed; 1 low-priority follow-up remains pending',
+          outcome: 'expected 201; actual status 200; TODO follow-up',
         },
         readinessProject('project-beta', 'real-project-validation/project-beta.md'),
       ],
@@ -817,6 +817,18 @@ test('readiness scorer rejects invalid evidence manifests and unsafe evidence fi
         writeManifest({ version: 1, projects });
       },
     },
+    ...[
+      ['postfixed expected status', 'HTTP status 200 expected'],
+      ['postfixed planned count', '12 tests planned'],
+      ['postfixed should status', 'Status 200 should be returned'],
+      ['bare actual does not rescue expected status', 'HTTP status 200 expected; actual unknown'],
+    ].map(([name, outcome]) => ({
+      name,
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], outcome }, projects[1]],
+      }),
+    })),
     {
       name: 'weak evidence without concrete proof',
       setup: ({ projects, evidenceDir, writeManifest }) => {

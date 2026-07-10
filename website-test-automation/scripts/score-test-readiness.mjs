@@ -283,24 +283,40 @@ const dimensions = [
 
 const placeholderPattern = /(?:^|[^A-Za-z0-9_./-])(?:todo|tbd|pending|placeholder|not[\s_-]+run|example[\s_-]*only|replace(?:[\s_-]+(?:me|this|later))?)(?=$|[^A-Za-z0-9_./-])/i;
 const concreteResultPatterns = [
-  { pattern: /\b(?:passed|failed|verified|observed|completed|succeeded)\b/gi, requiresContext: true },
-  { pattern: /\b\d+\s+(?:tests?|checks?|assertions?|cases?|passes?|failures?)\b/gi, requiresContext: false },
-  { pattern: /\b(?:http(?:\s+status)?|status(?:\s+code)?|exit(?:\s+code)?)\s*[:=]?\s*\d{1,3}\b/gi, requiresContext: false },
+  { kind: 'verb', pattern: /\b(?:passed|failed|verified|observed|completed|succeeded)\b/gi, requiresContext: true },
+  { kind: 'metric', pattern: /\b\d+\s+(?:tests?|checks?|assertions?|cases?|passes?|failures?)\b/gi, requiresContext: false },
+  { kind: 'metric', pattern: /\b(?:http(?:\s+status)?|status(?:\s+code)?|exit(?:\s+code)?)\s*[:=]?\s*\d{1,3}\b/gi, requiresContext: false },
 ];
+const expectationLanguagePattern = /\b(?:expect(?:ed|ation)?|should|will|plan(?:ned)?|target)\b/gi;
+const actualContextPattern = /\b(?:actual|observed|received|returned|recorded)\b/gi;
 
 function placeholderMarkerIndex(value) {
   return value.search(placeholderPattern);
 }
 
 function concreteResultIndex(value) {
+  expectationLanguagePattern.lastIndex = 0;
+  const hasExpectationLanguage = expectationLanguagePattern.test(value);
   let earliest = Number.POSITIVE_INFINITY;
   const substantiveTokenCount = value.match(/[A-Za-z0-9][A-Za-z0-9_-]*/g)?.length || 0;
-  for (const { pattern, requiresContext } of concreteResultPatterns) {
+  for (const { kind, pattern, requiresContext } of concreteResultPatterns) {
     pattern.lastIndex = 0;
     for (const match of value.matchAll(pattern)) {
       if (requiresContext && substantiveTokenCount < 3) continue;
-      const expectationContext = value.slice(Math.max(0, match.index - 48), match.index);
-      if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b[^.;]*$/i.test(expectationContext)) continue;
+      if (kind === 'verb') {
+        const expectationContext = value.slice(Math.max(0, match.index - 48), match.index);
+        if (/\b(?:expect(?:ed|ation)?|should|will|planned?|target)\b[^.;]*$/i.test(expectationContext)) continue;
+      }
+      if (kind === 'metric' && hasExpectationLanguage) {
+        const prefix = value.slice(0, match.index);
+        expectationLanguagePattern.lastIndex = 0;
+        actualContextPattern.lastIndex = 0;
+        const expectationIndexes = [...prefix.matchAll(expectationLanguagePattern)].map((item) => item.index);
+        const actualIndexes = [...prefix.matchAll(actualContextPattern)].map((item) => item.index);
+        const lastExpectation = expectationIndexes.at(-1) ?? -1;
+        const lastActual = actualIndexes.at(-1) ?? -1;
+        if (lastActual <= lastExpectation) continue;
+      }
       earliest = Math.min(earliest, match.index);
     }
   }
