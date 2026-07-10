@@ -4,9 +4,9 @@
 
 - Roadmap status source: [docs/DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
 - Active task: [docs/tasks/2026-07-10-systematic-skill-hardening.md](tasks/2026-07-10-systematic-skill-hardening.md)
-- Task status: In Progress
+- Task status: Done
 - Current blocker: None
-- Next step: Execute the five TDD hardening slices in `docs/plans/2026-07-10-skill-hardening-implementation.md`, then forward-test on a fresh fixture whose answer is not embedded in the skill.
+- Next step: Choose whether to merge, push for review, or keep `codex/skill-hardening-20260710` as-is; the installed skill is already synchronized and verified.
 - PRD alignment status: [docs/PRD.md](PRD.md) is the product requirements source; roadmap is aligned as of 2026-05-27.
 
 ## Recent Completed Tasks
@@ -37,7 +37,9 @@
 - 2026-05-28: Added a Human Reasonableness Review Gate so agents compare documented expectation, observed behavior, and human expectation before accepting product logic.
 - 2026-06-03: Reviewed and broadened the skill: reconciled the README readiness badge (89 → 83 calibrated) and the stale test count, added an end-to-end worked example on the auth-crud fixture, added `api-contract-testing.md` and `test-quality.md` references for web-QA depth, and added `service-and-library-testing.md` plus a broadened SKILL.md description/scope covering backend/service/CLI/library surfaces while keeping the website core and name.
 - 2026-06-10: Closed tester-facing gaps from the latest review: added black-box/URL-only testing, defect reporting, classic test design techniques, chartered exploratory sessions, release test plan template, CSV/Markdown test-case export, JUnit XML report summarization, Nuxt route inventory, Windows path fixes, output-language rule, and Claude Code install paths — with six new repository tests and validator coverage.
+- 2026-07-10: Completed systematic skill hardening across fail-closed validation/reporting, testcase parsing/export, real automation templates, honest examples, canonical routing fields, conditional workflow/browser evidence, structured readiness proof, safe monorepo discovery, and package-root-aware Next/Nuxt route inventory; synchronized the verified installed copy.
 
 ## Latest Verification Summary
 
 - 2026-06-10: `npm run validate` passed 39 repository tests plus agent-workflow validation; `node website-test-automation/scripts/validate-skill.mjs website-test-automation` passed; `score-test-readiness.mjs` reported `contractScore` 100 and calibrated `overallScore` 89 (cap intact, no bundled case studies); export and JUnit fixtures verified by the new tests. README badges updated to 39 tests while keeping the calibrated 83/100 readiness claim.
+- 2026-07-10: `npm run validate` passed 104 repository checks plus workflow validation; local and official skill validators passed; a fresh baseline/current forward test demonstrated workspace, route, report-redaction, and schema fail-closed improvements; installed-copy diff and smokes passed; readiness remained `contractScore` 100 / evidence-calibrated `overallScore` 89.
