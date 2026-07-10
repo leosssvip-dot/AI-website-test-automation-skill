@@ -1623,6 +1623,87 @@ test('route-inventory handles Next.js app API root routes and route groups', () 
   assert.equal(routes.some((route) => route.includes('(internal)')), false);
 });
 
+test('route-inventory recognizes modern Next.js route methods without comment false positives', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'api-method-route-inventory-'));
+  fs.mkdirSync(path.join(fixture, 'app', 'api', 'items'), { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture, 'app', 'api', 'items', 'route.ts'),
+    [
+      'export function GET() { return Response.json([]); }',
+      'export const POST = async () => Response.json({}, { status: 201 });',
+      'export const HEAD = () => new Response(null);',
+      'export async function OPTIONS() { return new Response(null); }',
+      '// export async function DELETE() { return new Response(null); }',
+      '/* export const PATCH = async () => new Response(null); */',
+    ].join('\n'),
+  );
+  fs.mkdirSync(path.join(fixture, 'app', 'api', 'commented'), { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture, 'app', 'api', 'commented', 'route.ts'),
+    '// export async function DELETE() { return new Response(null); }\n',
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const routes = result.routes.map((route) => route.route);
+  assert.equal(routes.includes('GET|POST|HEAD|OPTIONS /api/items'), true);
+  assert.equal(routes.includes('/api/commented'), true);
+  assert.equal(routes.some((route) => /DELETE|PATCH/.test(route)), false);
+});
+
+test('route-inventory normalizes parallel and intercepting Next.js route segments', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'next-segment-route-inventory-'));
+  const pages = [
+    ['app', 'dashboard', '@modal', 'settings', 'page.tsx'],
+    ['app', 'feed', '@modal', '(.)compose', 'page.tsx'],
+    ['app', 'feed', '@modal', '(..)photo', '[id]', 'page.tsx'],
+    ['app', 'account', 'settings', '@modal', '(..)(..)help', 'page.tsx'],
+    ['app', 'account', '@modal', '(...)login', 'page.tsx'],
+  ];
+  for (const segments of pages) {
+    const file = path.join(fixture, ...segments);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'export default function Page() { return null; }\n');
+  }
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const routes = result.routes.map((route) => route.route);
+  assert.equal(routes.includes('/dashboard/settings'), true);
+  assert.equal(routes.includes('/feed/compose'), true);
+  assert.equal(routes.includes('/photo/[id]'), true);
+  assert.equal(routes.includes('/help'), true);
+  assert.equal(routes.includes('/login'), true);
+  assert.equal(routes.some((route) => route.includes('@modal') || route.includes('(.)')), false);
+});
+
+test('route-inventory ignores commented route hints and rejects route symlinks', () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'route-inventory-outside-'));
+  fs.writeFileSync(path.join(outside, 'page.tsx'), 'export default function Leaked() { return null; }\n');
+
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'safe-route-inventory-'));
+  fs.mkdirSync(path.join(fixture, 'server'), { recursive: true });
+  fs.writeFileSync(
+    path.join(fixture, 'server', 'routes.ts'),
+    [
+      "app.get('/live', handler);",
+      "const liveRoute = <Route path='/client-live' />;",
+      "// app.post('/commented-server', handler);",
+      "/* const hiddenRoute = <Route path='/commented-client' />; */",
+    ].join('\n'),
+  );
+  fs.mkdirSync(path.join(fixture, 'app', 'leaked'), { recursive: true });
+  fs.symlinkSync(path.join(outside, 'page.tsx'), path.join(fixture, 'app', 'leaked', 'page.tsx'));
+  fs.symlinkSync(outside, path.join(fixture, 'app', 'escaped-directory'));
+
+  const result = runJson('node', ['website-test-automation/scripts/route-inventory.mjs', fixture]);
+  const routes = result.routes.map((route) => route.route);
+  assert.equal(routes.includes('GET /live'), true);
+  assert.equal(routes.includes('/client-live'), true);
+  assert.equal(routes.includes("POST /commented-server"), false);
+  assert.equal(routes.includes('/commented-client'), false);
+  assert.equal(routes.includes('/leaked'), false);
+  assert.match(result.notes.join('\n'), /symlink/i);
+});
+
 test('route-inventory maps Next.js pages index routes to route roots', () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pages-route-inventory-'));
   fs.mkdirSync(path.join(fixture, 'pages', 'api'), { recursive: true });
