@@ -12,29 +12,92 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 }
 
 const root = path.resolve(process.argv.find((arg, i) => i > 1 && !arg.startsWith('--')) || '.');
-if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+let rootRealPath;
+try {
+  if (!fs.statSync(root).isDirectory()) throw new Error('not a directory');
+  rootRealPath = fs.realpathSync(root);
+} catch {
   console.error(`Unreadable path: ${root}`);
   process.exit(2);
 }
 
 const ignored = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage']);
+const evidenceDirectories = new Set(['real-project-validation', 'forward-test-results', 'case-studies']);
+const maxTextFileBytes = 2 * 1024 * 1024;
 const files = [];
 
-function walk(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (ignored.has(entry.name)) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
-    else files.push(full);
+function isRootContained(candidate) {
+  const relative = path.relative(rootRealPath, candidate);
+  return relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function inspectContainedRegularFile(file, maxBytes = maxTextFileBytes) {
+  const absolute = path.resolve(file);
+  if (!isRootContained(absolute)) return { ok: false, reason: 'path escapes the target root' };
+
+  const relative = path.relative(rootRealPath, absolute);
+  let current = rootRealPath;
+  try {
+    for (const segment of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      const stats = fs.lstatSync(current);
+      if (stats.isSymbolicLink()) return { ok: false, reason: 'path contains a symbolic link' };
+    }
+
+    const stats = fs.lstatSync(absolute);
+    if (stats.isSymbolicLink() || !stats.isFile()) {
+      return { ok: false, reason: 'path is not an ordinary non-symlink file' };
+    }
+    if (stats.size > maxBytes) {
+      return { ok: false, reason: `file exceeds the ${maxBytes}-byte text limit` };
+    }
+    if (!isRootContained(fs.realpathSync(absolute))) {
+      return { ok: false, reason: 'real path escapes the target root' };
+    }
+    return { ok: true, stats };
+  } catch {
+    return { ok: false, reason: 'path does not exist or is unreadable' };
   }
 }
 
-walk(root);
+function walk(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name));
+  } catch {
+    return;
+  }
 
-const rel = (file) => path.relative(root, file).replaceAll(path.sep, '/');
+  for (const entry of entries) {
+    if (ignored.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    try {
+      const stats = fs.lstatSync(full);
+      if (stats.isSymbolicLink()) continue;
+      if (stats.isDirectory()) {
+        const realDirectory = fs.realpathSync(full);
+        if (isRootContained(realDirectory)) walk(realDirectory);
+      } else if (stats.isFile()) {
+        const realFile = fs.realpathSync(full);
+        if (isRootContained(realFile)) files.push(full);
+      }
+    } catch {
+      // Ignore entries that disappear or become unreadable during traversal.
+    }
+  }
+}
+
+walk(rootRealPath);
+
+const rel = (file) => path.relative(rootRealPath, file).replaceAll(path.sep, '/');
 const relFiles = files.map(rel);
 const textFiles = files.filter((file) => /\.(md|ya?ml|json|mjs|js|ts|tsx|jsx|html)$/.test(file));
 const allText = textFiles.map((file) => {
+  const inspection = inspectContainedRegularFile(file);
+  if (!inspection.ok) return '';
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -115,7 +178,7 @@ const dimensions = [
     { points: 25, label: 'browser adapter model', pass: () => hasFile(/browser-tool-adapters\.md$/) || hasText(/Browser Adapter|Codex Browser|Chrome DevTools|Browser Smoke Evidence/i) },
     { points: 25, label: 'browser-agent smoke evidence required', pass: () => hasText(/browser-agent smoke evidence|Browser Smoke Evidence/i) },
     { points: 25, label: 'screenshots, console/network, mobile overflow', pass: () => hasText(/screenshots?/i) && hasText(/console\/network|console.*network|console errors?/is) && hasText(/mobile.*overflow|horizontal overflow/i) },
-    { points: 25, label: 'scoped-skip reason', pass: () => hasText(/scoped-skip reason/i) },
+    { points: 25, label: 'browser evidence applicability condition', pass: () => hasText(/## Browser Evidence Condition/i) && hasText(/When none of those conditions applies/i) },
   ]),
   scoreDimension('ci-flaky-reporting', 'CI/flaky reporting', [
     { points: 25, label: 'CI reporting guidance', pass: () => hasFile(/ci-reporting\.md$/) || hasText(/CI Reporting/i) },
@@ -137,13 +200,181 @@ const dimensions = [
   ]),
 ];
 
+function startsAsPlaceholder(value) {
+  return /^(?:todo|tbd|pending|placeholder|not[\s_-]+run|example[\s_-]*only|replace(?:[\s_-]+(?:me|this|later))?)\b/i.test(value);
+}
+
+function hasConcreteResult(value) {
+  return /\b(?:passed|failed|verified|observed|completed)\b|\b\d+\s+(?:tests?|checks?|assertions?|passes?|failures?)\b|\b(?:status|exit)(?:\s+code)?\s*[:=]?\s*\d+\b/i.test(value);
+}
+
+function isPlaceholderValue(value) {
+  if (typeof value !== 'string' || value.trim() === '') return true;
+  const normalized = value.trim();
+  return startsAsPlaceholder(normalized) && !hasConcreteResult(normalized);
+}
+
+function isPlaceholderOnlyEvidence(contents) {
+  if (typeof contents !== 'string' || contents.trim() === '') return true;
+  const normalized = contents.trim().replace(/^#+\s*/, '');
+  return startsAsPlaceholder(normalized) && !hasConcreteResult(normalized);
+}
+
+function isEvidenceManifest(relativeFile) {
+  const segments = relativeFile.split('/');
+  return segments.at(-1) === 'evidence-manifest.json' &&
+    segments.slice(0, -1).some((segment) => evidenceDirectories.has(segment));
+}
+
+function validateEvidenceReference(reference, projectLabel) {
+  if (typeof reference !== 'string' || reference.trim() === '') {
+    return `${projectLabel} has a blank evidence reference`;
+  }
+  if (path.isAbsolute(reference)) return `${projectLabel} evidence reference must be relative to the target root`;
+  if (reference.split(/[\\/]+/).includes('..')) {
+    return `${projectLabel} evidence reference must not contain parent-directory traversal`;
+  }
+
+  let evidencePath;
+  try {
+    evidencePath = path.resolve(rootRealPath, reference);
+  } catch {
+    return `${projectLabel} evidence reference is not a usable path`;
+  }
+  const inspection = inspectContainedRegularFile(evidencePath);
+  if (!inspection.ok) return `${projectLabel} evidence ${JSON.stringify(reference)}: ${inspection.reason}`;
+
+  let contents;
+  try {
+    contents = fs.readFileSync(evidencePath, 'utf8');
+  } catch {
+    return `${projectLabel} evidence ${JSON.stringify(reference)} is unreadable`;
+  }
+  if (isPlaceholderOnlyEvidence(contents)) {
+    return `${projectLabel} evidence ${JSON.stringify(reference)} is empty or placeholder-only`;
+  }
+  return null;
+}
+
+function validateEvidenceManifest(manifestFile) {
+  const manifestPath = rel(manifestFile);
+  const reasons = [];
+  const inspection = inspectContainedRegularFile(manifestFile);
+  if (!inspection.ok) {
+    return { manifestPath, valid: false, validProjectCount: 0, reasons: [inspection.reason] };
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  } catch {
+    return { manifestPath, valid: false, validProjectCount: 0, reasons: ['manifest is malformed JSON'] };
+  }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    return { manifestPath, valid: false, validProjectCount: 0, reasons: ['manifest must be a JSON object'] };
+  }
+  if (manifest.version !== 1) reasons.push('manifest version must equal 1');
+  if (!Array.isArray(manifest.projects)) {
+    reasons.push('manifest projects must be an array');
+    return { manifestPath, valid: false, validProjectCount: 0, reasons };
+  }
+  if (manifest.projects.length < 2) reasons.push('manifest must contain at least two projects');
+
+  const validIds = [];
+  let validProjectCount = 0;
+  for (const [index, project] of manifest.projects.entries()) {
+    const projectLabel = `projects[${index}]`;
+    const projectReasons = [];
+    if (!project || typeof project !== 'object' || Array.isArray(project)) {
+      projectReasons.push(`${projectLabel} must be an object`);
+    } else {
+      for (const field of ['id', 'target', 'command', 'outcome']) {
+        if (isPlaceholderValue(project[field])) {
+          projectReasons.push(`${projectLabel}.${field} must be a non-placeholder string`);
+        }
+      }
+      if (!Array.isArray(project.evidence) || project.evidence.length === 0) {
+        projectReasons.push(`${projectLabel}.evidence must be a nonempty string array`);
+      } else {
+        for (const reference of project.evidence) {
+          const evidenceReason = validateEvidenceReference(reference, projectLabel);
+          if (evidenceReason) projectReasons.push(evidenceReason);
+        }
+      }
+    }
+
+    if (projectReasons.length === 0) {
+      validProjectCount += 1;
+      validIds.push(project.id.trim().toLowerCase());
+    } else {
+      reasons.push(...projectReasons);
+    }
+  }
+
+  const uniqueIds = new Set(validIds);
+  if (uniqueIds.size < 2) reasons.push('manifest must contain at least two unique valid project IDs');
+  if (uniqueIds.size !== validIds.length) reasons.push('manifest project IDs must not be duplicated');
+  if (validProjectCount < 2) reasons.push('manifest must contain at least two fully valid projects');
+
+  return {
+    manifestPath,
+    valid: reasons.length === 0,
+    validProjectCount,
+    reasons,
+  };
+}
+
+function evaluateRealProjectEvidence() {
+  const candidates = files
+    .filter((file) => isEvidenceManifest(rel(file)))
+    .sort((left, right) => rel(left).localeCompare(rel(right)));
+  if (candidates.length === 0) {
+    return {
+      hasProvenRealProjectEvidence: false,
+      manifestPath: null,
+      validProjectCount: 0,
+      reasons: ['No root-contained ordinary evidence-manifest.json was found under an approved evidence directory.'],
+      manifestEvaluations: [],
+    };
+  }
+
+  const evaluations = candidates.map(validateEvidenceManifest);
+  const manifestEvaluations = evaluations.map(({ manifestPath, valid, validProjectCount, reasons }) => ({
+    manifestPath,
+    valid,
+    validProjectCount,
+    reasons,
+  }));
+  const valid = evaluations.find((evaluation) => evaluation.valid);
+  if (valid) {
+    return {
+      hasProvenRealProjectEvidence: true,
+      manifestPath: valid.manifestPath,
+      validProjectCount: valid.validProjectCount,
+      reasons: [],
+      manifestEvaluations,
+    };
+  }
+
+  const selected = evaluations.reduce((best, evaluation) =>
+    evaluation.validProjectCount > best.validProjectCount ? evaluation : best);
+  return {
+    hasProvenRealProjectEvidence: false,
+    manifestPath: selected.manifestPath,
+    validProjectCount: selected.validProjectCount,
+    reasons: selected.reasons.map((reason) => `${selected.manifestPath}: ${reason}`),
+    manifestEvaluations,
+  };
+}
+
 const contractScore = Math.round(dimensions.reduce((sum, dimension) => sum + dimension.score, 0) / dimensions.length);
 const gaps = dimensions.flatMap((dimension) => dimension.missing.map((missing) => ({
   workstream: dimension.key,
   missing,
 })));
-const hasProvenRealProjectEvidence = hasFile(/(^|\/)(real-project-validation|forward-test-results|case-studies)\//i);
-const overallScore = hasProvenRealProjectEvidence ? contractScore : Math.min(contractScore, 89);
+const evidenceCalibration = evaluateRealProjectEvidence();
+const { hasProvenRealProjectEvidence } = evidenceCalibration;
+const overallScore = hasProvenRealProjectEvidence && contractScore >= 90 ? contractScore : Math.min(contractScore, 89);
 const level =
   overallScore >= 90 && hasProvenRealProjectEvidence ? '90+ proven maturity candidate' :
   overallScore >= 80 ? '80-90 mature readiness candidate' :
@@ -159,10 +390,10 @@ console.log(JSON.stringify({
   level,
   measurementNote: 'Scores measure process evidence found in files (docs, templates, scripts, test files); the scorer does not execute tests or measure runtime coverage.',
   evidenceCalibration: {
-    hasProvenRealProjectEvidence,
+    ...evidenceCalibration,
     note: hasProvenRealProjectEvidence ?
-      'Overall score reflects contract coverage and bundled real-project evidence.' :
-      'Overall score is capped below 90 until bundled real-project evidence exists; contractScore shows raw package contract coverage.',
+      'A valid structured real-project evidence manifest was found; 90+ still requires contractScore >= 90.' :
+      'Overall score is capped below 90 until a valid structured real-project evidence manifest exists; contractScore shows raw package contract coverage.',
   },
   dimensions,
   gaps,

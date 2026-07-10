@@ -44,6 +44,22 @@ function runJson(command, args) {
   return JSON.parse(run(command, args));
 }
 
+function copiedReadinessFixture(prefix) {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.cpSync(skillRoot, fixture, { recursive: true });
+  return fixture;
+}
+
+function readinessProject(id, evidence) {
+  return {
+    id,
+    target: `https://${id}.test/critical-flow`,
+    command: `npm test -- ${id}`,
+    outcome: `${id} critical flow passed with recorded assertions`,
+    evidence: [evidence],
+  };
+}
+
 function validTestCase(overrides = {}) {
   return {
     id: 'TC-SCHEMA-001',
@@ -675,6 +691,10 @@ test('readiness scorer rates the skill across major testing workstreams', () => 
   assert.equal(result.overallScore, 89);
   assert.match(result.level, /80-90/);
   assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(result.evidenceCalibration.manifestPath, null);
+  assert.equal(result.evidenceCalibration.validProjectCount, 0);
+  assert.equal(Array.isArray(result.evidenceCalibration.reasons), true);
+  assert.equal(result.evidenceCalibration.reasons.length > 0, true);
   for (const key of [
     'product-understanding',
     'source-backed-cases',
@@ -687,6 +707,279 @@ test('readiness scorer rates the skill across major testing workstreams', () => 
   ]) {
     assert.equal(result.dimensions.some((dimension) => dimension.key === key), true);
   }
+});
+
+test('readiness scorer does not unlock 90+ for a TODO README evidence directory', () => {
+  const fixture = copiedReadinessFixture('readiness-todo-directory-');
+  const evidenceDir = path.join(fixture, 'real-project-validation');
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(evidenceDir, 'README.md'), '# TODO\n\nReplace this example-only evidence later.\n');
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  assert.equal(result.contractScore >= 90, true);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(result.evidenceCalibration.manifestPath, null);
+  assert.equal(result.evidenceCalibration.validProjectCount, 0);
+  assert.equal(result.evidenceCalibration.reasons.length > 0, true);
+  assert.equal(result.overallScore <= 89, true);
+});
+
+test('readiness scorer unlocks 90+ for a valid two-project evidence manifest', () => {
+  const fixture = copiedReadinessFixture('readiness-valid-manifest-');
+  const evidenceDir = path.join(fixture, 'real-project-validation');
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(evidenceDir, 'project-alpha-pending-regressions.md'),
+    'Project alpha critical flow passed 12 deterministic assertions. TODO: investigate one low-priority follow-up.\n',
+  );
+  fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta critical flow passed 9 deterministic assertions.\n');
+  fs.writeFileSync(
+    path.join(evidenceDir, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [
+        {
+          ...readinessProject('project-alpha', 'real-project-validation/project-alpha-pending-regressions.md'),
+          outcome: '12 tests passed; 1 low-priority follow-up remains pending',
+        },
+        readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+      ],
+    }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  assert.equal(result.contractScore >= 90, true);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, true);
+  assert.equal(result.evidenceCalibration.manifestPath, 'real-project-validation/evidence-manifest.json');
+  assert.equal(result.evidenceCalibration.validProjectCount, 2);
+  assert.deepEqual(result.evidenceCalibration.reasons, []);
+  assert.equal(result.overallScore, result.contractScore);
+  assert.match(result.level, /90\+/);
+});
+
+test('readiness scorer rejects invalid evidence manifests and unsafe evidence files', () => {
+  const invalidCases = [
+    {
+      name: 'empty projects',
+      setup: ({ writeManifest }) => writeManifest({ version: 1, projects: [] }),
+    },
+    {
+      name: 'placeholder fields',
+      setup: ({ writeManifest }) => writeManifest({
+        version: 1,
+        projects: [
+          { id: 'TODO', target: 'TBD', command: 'not run', outcome: 'pending', evidence: ['replace-me'] },
+          { id: 'example-only', target: 'placeholder', command: 'TODO', outcome: 'TBD', evidence: ['pending'] },
+        ],
+      }),
+    },
+    {
+      name: 'single project',
+      setup: ({ projects, writeManifest }) => writeManifest({ version: 1, projects: [projects[0]] }),
+    },
+    {
+      name: 'duplicate project IDs',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [projects[0], { ...projects[1], id: projects[0].id }],
+      }),
+    },
+    {
+      name: 'missing evidence reference',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], evidence: ['real-project-validation/missing.md'] }, projects[1]],
+      }),
+    },
+    {
+      name: 'empty evidence array',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], evidence: [] }, projects[1]],
+      }),
+    },
+    {
+      name: 'absolute evidence reference',
+      setup: ({ projects, evidenceDir, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [{ ...projects[0], evidence: [path.join(evidenceDir, 'project-alpha.md')] }, projects[1]],
+      }),
+    },
+    {
+      name: 'traversal evidence reference',
+      setup: ({ projects, fixture, writeManifest }) => {
+        const outside = path.join(path.dirname(fixture), `${path.basename(fixture)}-outside.md`);
+        fs.writeFileSync(outside, 'External evidence must not count.\n');
+        writeManifest({
+          version: 1,
+          projects: [{ ...projects[0], evidence: [`../${path.basename(outside)}`] }, projects[1]],
+        });
+      },
+    },
+    {
+      name: 'root-internal traversal evidence reference',
+      setup: ({ projects, writeManifest }) => writeManifest({
+        version: 1,
+        projects: [
+          { ...projects[0], evidence: ['real-project-validation/nested/../project-alpha.md'] },
+          projects[1],
+        ],
+      }),
+    },
+    {
+      name: 'external evidence symlink',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-outside-evidence-'));
+        const outside = path.join(outsideDir, 'proof.md');
+        fs.writeFileSync(outside, 'External evidence must not count.\n');
+        fs.rmSync(path.join(evidenceDir, 'project-alpha.md'));
+        fs.symlinkSync(outside, path.join(evidenceDir, 'project-alpha.md'));
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'empty evidence file',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), '');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'placeholder evidence file',
+      setup: ({ projects, evidenceDir, writeManifest }) => {
+        fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'TODO: replace this example-only evidence.\n');
+        writeManifest({ version: 1, projects });
+      },
+    },
+    {
+      name: 'malformed manifest',
+      setup: ({ manifestPath }) => fs.writeFileSync(manifestPath, '{'),
+    },
+    {
+      name: 'unsupported manifest version',
+      setup: ({ projects, writeManifest }) => writeManifest({ version: 2, projects }),
+    },
+    {
+      name: 'manifest symlink',
+      setup: ({ projects, manifestPath }) => {
+        const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-outside-manifest-'));
+        const outside = path.join(outsideDir, 'evidence-manifest.json');
+        fs.writeFileSync(outside, JSON.stringify({ version: 1, projects }));
+        fs.symlinkSync(outside, manifestPath);
+      },
+    },
+  ];
+
+  const wronglyUnlocked = [];
+  const missingAuditReasons = [];
+  for (const invalidCase of invalidCases) {
+    const fixture = copiedReadinessFixture(`readiness-invalid-${invalidCase.name.replaceAll(' ', '-')}-`);
+    const evidenceDir = path.join(fixture, 'real-project-validation');
+    const manifestPath = path.join(evidenceDir, 'evidence-manifest.json');
+    fs.mkdirSync(evidenceDir, { recursive: true });
+    fs.writeFileSync(path.join(evidenceDir, 'project-alpha.md'), 'Project alpha passed 12 deterministic assertions.\n');
+    fs.writeFileSync(path.join(evidenceDir, 'project-beta.md'), 'Project beta passed 9 deterministic assertions.\n');
+    const projects = [
+      readinessProject('project-alpha', 'real-project-validation/project-alpha.md'),
+      readinessProject('project-beta', 'real-project-validation/project-beta.md'),
+    ];
+    invalidCase.setup({
+      fixture,
+      evidenceDir,
+      manifestPath,
+      projects,
+      writeManifest: (manifest) => fs.writeFileSync(manifestPath, JSON.stringify(manifest)),
+    });
+
+    const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+    if (result.evidenceCalibration.hasProvenRealProjectEvidence || result.overallScore > 89) {
+      wronglyUnlocked.push(invalidCase.name);
+    }
+    if (!Array.isArray(result.evidenceCalibration.reasons) || result.evidenceCalibration.reasons.length === 0) {
+      missingAuditReasons.push(invalidCase.name);
+    }
+  }
+
+  assert.deepEqual(wronglyUnlocked, []);
+  assert.deepEqual(missingAuditReasons, []);
+});
+
+test('readiness scorer keeps multi-manifest audit fields attributable', () => {
+  const fixture = copiedReadinessFixture('readiness-multi-manifest-audit-');
+  const caseStudies = path.join(fixture, 'case-studies');
+  const forwardResults = path.join(fixture, 'forward-test-results');
+  fs.mkdirSync(caseStudies, { recursive: true });
+  fs.mkdirSync(forwardResults, { recursive: true });
+  fs.writeFileSync(path.join(caseStudies, 'evidence-manifest.json'), JSON.stringify({ version: 1, projects: [] }));
+  fs.writeFileSync(path.join(forwardResults, 'project-alpha.md'), 'Project alpha passed 12 assertions.\n');
+  fs.writeFileSync(
+    path.join(forwardResults, 'evidence-manifest.json'),
+    JSON.stringify({
+      version: 1,
+      projects: [readinessProject('project-alpha', 'forward-test-results/project-alpha.md')],
+    }),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(result.evidenceCalibration.manifestPath, 'forward-test-results/evidence-manifest.json');
+  assert.equal(result.evidenceCalibration.validProjectCount, 1);
+  assert.equal(result.evidenceCalibration.reasons.every((reason) => reason.startsWith('forward-test-results/evidence-manifest.json:')), true);
+  assert.deepEqual(
+    result.evidenceCalibration.manifestEvaluations.map((evaluation) => evaluation.manifestPath),
+    ['case-studies/evidence-manifest.json', 'forward-test-results/evidence-manifest.json'],
+  );
+});
+
+test('readiness scorer ignores external keyword text reached through a normal text symlink', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-external-text-symlink-'));
+  const caseStudies = path.join(fixture, 'case-studies');
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-external-keywords-'));
+  const outside = path.join(outsideDir, 'product-understanding.md');
+  fs.mkdirSync(caseStudies, { recursive: true });
+  fs.writeFileSync(
+    outside,
+    [
+      '# Product Understanding',
+      'Personas and workflows cover entities, states, and permissions.',
+      'Requirements Source Ranking records source_status mismatch handling.',
+      'Figma evidence includes assumptions and unknowns.',
+    ].join('\n'),
+  );
+  fs.symlinkSync(outside, path.join(caseStudies, 'product-understanding.md'));
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  const productUnderstanding = result.dimensions.find((dimension) => dimension.key === 'product-understanding');
+  assert.equal(productUnderstanding.score, 0);
+  assert.equal(result.evidenceCalibration.hasProvenRealProjectEvidence, false);
+  assert.equal(result.overallScore <= 89, true);
+});
+
+test('readiness scorer does not treat a negated scoped-skip phrase as browser applicability evidence', () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'readiness-browser-negation-'));
+  fs.writeFileSync(
+    path.join(fixture, 'browser-tool-adapters.md'),
+    [
+      '# Browser Adapter',
+      'Browser-agent smoke evidence is required.',
+      'Capture screenshots, console/network results, and mobile horizontal overflow.',
+      'There is no scoped-skip reason.',
+    ].join('\n'),
+  );
+
+  const result = runJson('node', ['website-test-automation/scripts/score-test-readiness.mjs', fixture]);
+  const browser = result.dimensions.find((dimension) => dimension.key === 'browser-smoke-evidence');
+  assert.equal(browser.score, 75);
+  assert.equal(browser.missing.includes('browser evidence applicability condition'), true);
+});
+
+test('readiness model documents the structured 90+ evidence gate and conditional browser workstream', () => {
+  const model = read('website-test-automation/references/readiness-model.md');
+  assert.match(model, /evidence-manifest\.json/);
+  assert.match(model, /at least two|minimum of two/i);
+  assert.match(model, /ordinary non-symlink/i);
+  assert.match(model, /Browser Evidence Condition/);
+  assert.match(model, /candidate[^\n]*not[^\n]*runtime quality guarantee/i);
 });
 
 test('readiness scorer identifies weak empty targets', () => {
